@@ -71,6 +71,7 @@ class OpCodes(IntEnum):
     MOTION = 240
     REQUEST = 250
     CONFIRM = 251
+    RELINK = 300
 
 
 VISEME_NAME_MAP = {
@@ -1645,6 +1646,8 @@ class DataLink(QObject):
         self.info_label_type = qt.label(grid, "", row=0, col=3, no_size=True)
         qt.label(grid, "Link ID", style=qt.STYLE_BOLD, row=1, col=0)
         self.info_label_link_id = qt.label(grid, "", row=1, col=1, no_size=True)
+        qt.button(grid, "", self.send_relink, qt.get_icon("FullBodyMorph.png"),
+                  icon_size=40, row=0, row_span=2, col=4)
 
         self.show_link_state()
 
@@ -2343,6 +2346,16 @@ class DataLink(QObject):
         self.send(OpCodes.CAMERA, export_data)
         self.update_link_status(f"Camera Sent: {actor.name}")
 
+    def send_relink(self):
+        actor = self.get_active_actor()
+        relink_data = encode_from_json({
+            "link_id": actor.get_link_id(),
+            "name": actor.name,
+            "type": actor.get_type(),
+        })
+        self.send(OpCodes.RELINK, relink_data)
+        self.update_link_status(f"Relink Sent: {actor.name} {actor.get_link_id()}")
+
     def send_actors_request(self):
         cc.deduplicate_scene_objects()
         self.send_request("ACTORS")
@@ -2905,7 +2918,7 @@ class DataLink(QObject):
             if actor:
 
                 # send method rules:
-                method = "UPDATE" if confirm else "SEND"
+                method = "UPDATE" if (confirm or request_type == "MOTIONS") else "SEND"
                 # skinned props must always be replaced
                 # as the first frame of animation is the models bind pose
                 if skinned and actor.is_prop():
