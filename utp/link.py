@@ -2918,7 +2918,11 @@ class DataLink(QObject):
             if actor:
 
                 # send method rules:
-                method = "UPDATE" if (confirm or request_type == "MOTIONS") else "SEND"
+                method = "UPDATE" if confirm else "SEND"
+
+                # always send a motion for avatar motion exports
+                if request_type == "MOTIONS" and actor.is_avatar():
+                    method = "UPDATE"
                 # skinned props must always be replaced
                 # as the first frame of animation is the models bind pose
                 if skinned and actor.is_prop():
