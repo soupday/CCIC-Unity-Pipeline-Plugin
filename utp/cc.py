@@ -2231,6 +2231,8 @@ def get_camera_data(camera: RICamera):
         camera.GetPivot(pos, rot)
         focal_length = camera.GetFocalLength(time)
         fov = camera.GetAngleOfView(time)
+        fit_fov = ("HORIZONTAL" if camera.GetFitFovType() == ECameraFitResolution_Horizontal
+                            else "VERTICAL")
         fit = ("HORIZONTAL" if camera.GetFitRenderRegionType() == ECameraFitResolution_Horizontal
                             else "VERTICAL")
         far_clip = camera.GetFarClippingPlane()
@@ -2260,6 +2262,7 @@ def get_camera_data(camera: RICamera):
             "sca": [s.x, s.y, s.z],
             "fov": fov,
             "fit": fit,
+            "fit_fov": fit_fov,
             "width": width,
             "height": height,
             "focal_length": focal_length,
