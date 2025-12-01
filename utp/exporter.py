@@ -919,7 +919,7 @@ class Exporter:
             utils.log_error("No valid json data could be found for the export ...")
             return
 
-        obj = self.avatar if self.avatar else self.prop if self.prop else self.camera if self.camera else self.light
+        obj = utils.first(self.avatar, self.prop, self.camera, self.light)
         if not obj: return
         if type(obj) is RILightAvatar: return
 
