@@ -44,5 +44,11 @@ Links
 Changelog
 =========
 
-### 2.1.0 (In Progress)
+### 2.1.1
+- Re-link function added.
+- Send motions when character not present in Unity.
+- Delete hidden faces defaults to True.
+- Camera switch data fix to camera exports.
+
+### 2.1.0
 - First release
