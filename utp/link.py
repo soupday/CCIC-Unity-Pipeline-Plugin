@@ -2817,8 +2817,11 @@ class DataLink(QObject):
         # Different from Blender Pipeline
         self.update_link_status(f"Synchronizing View Camera")
         self.send_notify(f"Sync View Camera")
+        fps = get_fps()
+        time: RTime = RGlobal.GetTime()
+        frame = fps.GetFrameIndex(time)
         view_camera: RICamera = RScene.GetCurrentCamera()
-        camera_data = cc.get_camera_data(view_camera)
+        camera_data = cc.get_camera_data(view_camera, frame)
         if camera_data:
             pivot = self.get_selection_pivot()
             camera_data["target"] = [pivot.x, pivot.y, pivot.z]
