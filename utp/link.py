@@ -21,9 +21,10 @@ from PySide2.QtCore import *
 from PySide2.QtGui import *
 from shiboken2 import wrapInstance
 import os, socket, select, struct, time, json, atexit, traceback, shutil
-import signal
-from . import importer, exporter, cc, qt, prefs, tests, utils, vars
+from . import vars, utils, cc, qt, options, prefs, tests, importer, exporter
+from . utils import LI, LW, LD, log_info, log_detail, log_warn, log_error
 from enum import IntEnum
+import math
 
 SERVER_PORT = 9334
 TIMER_INTERVAL = 1000/60
@@ -460,7 +461,7 @@ def reset_animation():
 
 
 def prep_timeline_old(SC: RISkeletonComponent, start_frame, end_frame):
-    fps = get_fps()
+    fps = get_local_fps()
     start_time = fps.IndexedFrameTime(start_frame)
     end_time: fps.IndexedFrameTime(end_frame)
     RGlobal.SetStartTime(start_time)
@@ -481,48 +482,53 @@ def prep_timeline_old(SC: RISkeletonComponent, start_frame, end_frame):
     return
 
 
-def get_fps() -> RFps:
+def get_local_fps() -> RFps:
     return RGlobal.GetFps()
 
 
-def get_current_frame():
-    fps = get_fps()
+def get_current_frame(fps: RFps = None):
+    if not fps:
+        fps = get_local_fps()
     current_time = RGlobal.GetTime()
     current_frame = fps.GetFrameIndex(current_time)
     return current_frame
 
 
-def get_end_frame():
-    fps = get_fps()
+def get_end_frame(fps: RFps = None):
+    if not fps:
+        fps = get_local_fps()
     end_time: RTime = RGlobal.GetEndTime()
     end_frame = fps.GetFrameIndex(end_time)
     return end_frame
 
 
-def next_frame(time):
-    fps = get_fps()
-    current_time = RGlobal.GetTime()
+def next_frame(time: RTime, fps: RFps = None):
+    if not fps:
+        fps = get_local_fps()
     next_time = fps.GetNextFrameTime(time)
     RGlobal.SetTime(next_time)
     return next_time
 
 
-def prev_frame(time):
-    fps = get_fps()
+def prev_frame(time: RTime, fps: RFps = None):
+    if not fps:
+        fps = get_local_fps()
     current_time = RGlobal.GetTime()
     prev_time = fps.GetPreviousFrameTime(time)
     RGlobal.SetTime(prev_time)
     return prev_time
 
 
-def set_frame_range(start_frame, end_frame):
-    fps = get_fps()
+def set_frame_range(start_frame, end_frame, fps: RFps = None):
+    if not fps:
+        fps = get_local_fps()
     RGlobal.SetStartTime(fps.IndexedFrameTime(start_frame))
     RGlobal.SetEndTime(fps.IndexedFrameTime(end_frame))
 
 
-def set_frame(frame):
-    fps = get_fps()
+def set_frame(frame, fps: RFps = None):
+    if not fps:
+        fps = get_local_fps()
     RGlobal.SetTime(fps.IndexedFrameTime(frame))
 
 
@@ -537,15 +543,10 @@ def refresh_timeline(actors):
         RScene.ClearSelectObjects()
 
 
-def get_frame_time(frame) -> RTime:
-    fps = get_fps()
+def get_frame_time(frame, fps: RFps=None) -> RTime:
+    if not fps:
+        fps = get_local_fps()
     return fps.IndexedFrameTime(frame)
-
-
-def get_clip_frame(clip: RIClip, scene_time: RTime):
-    fps = get_fps()
-    clip_time = clip.SceneTimeToClipTime(scene_time)
-    return fps.GetFrameIndex(clip_time)
 
 
 def update_timeline(to_time=None):
@@ -570,7 +571,7 @@ def set_project_range(end_time: RTime):
 
 
 def get_clip_at_or_before(avatar: RIAvatar, time: RTime):
-    fps = get_fps()
+    fps = get_local_fps()
     SC: RISkeletonComponent = avatar.GetSkeletonComponent()
     num_clips = SC.GetClipCount()
     found_clip: RIClip = None
@@ -591,7 +592,7 @@ def get_clip_at_or_before(avatar: RIAvatar, time: RTime):
 
 
 def make_avatar_clip(avatar, start_time, num_frames):
-    fps = get_fps()
+    fps = get_local_fps()
     SC: RISkeletonComponent = avatar.GetSkeletonComponent()
     clip: RIClip = SC.AddClip(start_time)
     length = fps.IndexedFrameTime(num_frames)
@@ -1068,10 +1069,12 @@ class LinkService(QObject):
             return True
 
     def send_hello(self):
+        OPTS = options.get_opts()
+
         self.local_app = RApplication.GetProductName()
         self.local_version = RApplication.GetProductVersion()
         prefs.check_paths(quiet=True, create=True)
-        self.local_path = prefs.DATALINK_FOLDER
+        self.local_path = OPTS.DATALINK_FOLDER
         json_data = {
             "Application": self.local_app,
             "Version": self.local_version,
@@ -1300,6 +1303,8 @@ class LinkService(QObject):
         return self.remote_is_local
 
     def loop(self):
+        OPTS = options.get_opts()
+
         try:
             current_time = time.time()
             delta_time = current_time - self.time
@@ -1336,7 +1341,7 @@ class LinkService(QObject):
             self.recv()
 
             # run anything in sequence
-            if prefs.DATALINK_FRAME_SYNC:
+            if OPTS.DATALINK_FRAME_SYNC:
                 self.sequence.emit()
             else:
                 for i in range(0, self.sequence_send_count):
@@ -1527,6 +1532,8 @@ class DataLink(QObject):
         return self.window.IsVisible()
 
     def create_window(self):
+        OPTS = options.get_opts()
+
         self.window, window_layout = qt.window("Unity DataLink", width=440, height=524, show_hide=self.on_show_hide)
 
         scroll, layout = qt.scroll_area(window_layout, vertical=True, horizontal=False)
@@ -1570,28 +1577,42 @@ class DataLink(QObject):
         #
         grid = qt.grid(layout)
         grid.setColumnStretch(0, 0)
-        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(1, 2)
         grid.setColumnStretch(2, 0)
-        grid.setColumnStretch(3, 1)
-        grid.setColumnStretch(4, 0)
-        grid.setColumnStretch(5, 2)
+        grid.setColumnStretch(3, 3)
+        # 0
         qt.label(grid, "Send:", row=0, col=0)
-        EXPORT_LEVEL = prefs.CC_EXPORT_MAX_SUB_LEVEL if cc.is_cc() else prefs.IC_EXPORT_MAX_SUB_LEVEL
+        # 1
+        EXPORT_LEVEL = OPTS.CC_EXPORT_MAX_SUB_LEVEL if cc.is_cc() else OPTS.IC_EXPORT_MAX_SUB_LEVEL
         EXPORT_LEVELS = { -1: "SubD Current", 0: "SubD 0", 1: "SubD 1", 2: "SubD 2" }
         self.combo_ccic_export_level = qt.combobox(grid, EXPORT_LEVELS[EXPORT_LEVEL], options = [
                                                         "SubD Current", "SubD 0", "SubD 1", "SubD 2"
                                                     ], update=self.update_combo_ccic_export_max_sub_level,
                                                     row=0, col=1, style=qt.STYLE_RL_BOLD)
+        # 2
         qt.label(grid, "With:", style=qt.STYLE_NONE, row=0, col=2)
-        EXPORT_MODE = prefs.CC_EXPORT_MODE if cc.is_cc() else prefs.IC_EXPORT_MODE
+        # 3
+        EXPORT_MODE = OPTS.CC_EXPORT_MODE if cc.is_cc() else OPTS.IC_EXPORT_MODE
         self.combo_ccic_export_mode = qt.combobox(grid, EXPORT_MODE, options = [
                                                         "No Animation", "Current Pose", "Animation"
                                                     ], update=self.update_combo_ccic_export_mode,
                                                     row=0, col=3, style=qt.STYLE_RL_BOLD)
-        qt.label(grid, f"Prefix:", row=0, col=4)
-        self.textbox_motion_prefix = qt.textbox(grid, self.motion_prefix,
-                                                row=0, col=5, update=self.update_motion_prefix)
+        # 0
+        qt.label(grid, f"Frame Rate:", row=1, col=0)
+        # 1
+        prop = "CC_EXPORT_FPS" if cc.is_cc() else "IC_EXPORT_FPS"
+        qt.DComboBox(self, grid, OPTS, prop,
+                           options=[(0, "Project fps"), (12, "12 fps"), (24, "24 fps (Film)"), (25, "25 fps (PAL)"), (30, "30 fps (NTSC)"), ((60, "60 fps (iClone)"))],
+                           numeric=True, min=1, max=120, suffix="fps", style=qt.STYLE_RL_BOLD,
+                           row=1, col=1, update=self.write_options)
+        # 2
+        qt.label(grid, f"Prefix:", row=1, col=2)
+        # 3
+        self.textbox_motion_prefix = qt.textbox(grid, self.motion_prefix, style=qt.STYLE_RL_BOLD,
+                                                row=1, col=3, update=self.update_motion_prefix)
 
+        # ACTORS
+        #
         grid = qt.grid(layout)
         grid.setColumnStretch(0,1)
         grid.setColumnStretch(1,1)
@@ -1670,6 +1691,11 @@ class DataLink(QObject):
         else:
             qt.toggle_toolbar_action("Unity Pipeline Toolbar", "Unity DataLink", False)
         self.register_callbacks(visible)
+
+
+    def write_options(self):
+        OPTS = options.get_opts()
+        OPTS.write_state()
 
 
     def on_exit(self):
@@ -1882,20 +1908,24 @@ class DataLink(QObject):
         self.motion_prefix = self.textbox_motion_prefix.text()
 
     def update_combo_ccic_export_max_sub_level(self):
+        OPTS = options.get_opts()
+
         text = self.combo_ccic_export_level.currentText()
         levels = { "SubD Current": -1, "SubD 0": 0, "SubD 1": 1, "SubD 2": 2 }
         if cc.is_cc():
-            prefs.CC_EXPORT_MAX_SUB_LEVEL = levels[text]
+            OPTS.CC_EXPORT_MAX_SUB_LEVEL = levels[text]
         else:
-            prefs.IC_EXPORT_MAX_SUB_LEVEL = levels[text]
-        prefs.write_temp_state()
+            OPTS.IC_EXPORT_MAX_SUB_LEVEL = levels[text]
+        OPTS.write_state()
 
     def update_combo_ccic_export_mode(self):
+        OPTS = options.get_opts()
+
         if cc.is_cc():
-            prefs.CC_EXPORT_MODE = self.combo_ccic_export_mode.currentText()
+            OPTS.CC_EXPORT_MODE = self.combo_ccic_export_mode.currentText()
         else:
-            prefs.IC_EXPORT_MODE = self.combo_ccic_export_mode.currentText()
-        prefs.write_temp_state()
+            OPTS.IC_EXPORT_MODE = self.combo_ccic_export_mode.currentText()
+        OPTS.write_state()
 
     def show_link_state(self):
         link_service = self.get_link_service()
@@ -2090,6 +2120,10 @@ class DataLink(QObject):
     def send_save(self):
         self.send(OpCodes.SAVE)
 
+    def get_link_fps(self) -> RFps:
+        OPTS = options.get_opts()
+        return OPTS.get_link_RFps()
+
     def get_remote_folder(self):
         link_service = self.get_link_service()
         if link_service:
@@ -2238,7 +2272,7 @@ class DataLink(QObject):
         #linked_object = actor.object.GetLinkedObject(RGlobal.GetTime())
         # Export Avatar
         export = exporter.Exporter(actor.object, no_window=True)
-        export.set_datalink_export()
+        export.set_datalink_export(fps=self.get_link_fps())
         export.do_export(file_path=export_path)
         # Send remote files first
         remote_id = self.send_remote_files(export_folder)
@@ -2266,7 +2300,7 @@ class DataLink(QObject):
         utils.log_info(f"Export Path: {export_path}")
         # Export Prop
         export = exporter.Exporter(actor.object, no_window=True)
-        export.set_datalink_export()
+        export.set_datalink_export(fps=self.get_link_fps())
         export.do_export(file_path=export_path)
         # Send Remote Files First
         remote_id = self.send_remote_files(export_folder)
@@ -2299,7 +2333,7 @@ class DataLink(QObject):
         utils.log_info(f"Export Path: {export_path}")
         # Export Light
         export = exporter.Exporter(lights_cameras, no_window=True)
-        export.set_datalink_export()
+        export.set_datalink_export(fps=self.get_link_fps())
         exported_paths = export.do_export(file_path=export_path, no_base_folder=True)
         names = [ os.path.splitext(os.path.split(p)[1])[0] for p in exported_paths ]
         # Send Remote Files First
@@ -2330,7 +2364,7 @@ class DataLink(QObject):
         utils.log_info(f"Export Path: {export_path}")
         # Export Camera
         export = exporter.Exporter(actor.object, no_window=True)
-        export.set_datalink_export()
+        export.set_datalink_export(fps=self.get_link_fps())
         export.do_export(file_path=export_path)
         # Send Remote Files First
         remote_id = self.send_remote_files(export_folder)
@@ -2361,6 +2395,9 @@ class DataLink(QObject):
         self.send_request("ACTORS")
 
     def send_actors(self, actors=None):
+        scene_selection = cc.store_scene_selection()
+        cc.deduplicate_scene_objects()
+
         if actors and type(actors) is not list:
             actors = [actors]
         if not actors:
@@ -2379,6 +2416,8 @@ class DataLink(QObject):
                 self.send_prop(actor)
             else:
                 utils.log_error("Unknown Actor type!")
+
+        cc.restore_scene_selection(scene_selection)
 
     def send_update_replace(self):
         avatars = {}
@@ -2453,27 +2492,27 @@ class DataLink(QObject):
             if not export_path: continue
             utils.log_info(f"Export Path: {export_path}")
             #linked_object = actor.object.GetLinkedObject(RGlobal.GetTime())
+            link_fps = self.get_link_fps()
             export = exporter.Exporter(actor.object, no_window=True)
-            export.set_datalink_motion_export()
+            export.set_datalink_motion_export(fps=link_fps)
             export.do_export(export_path)
             # Send Remote Files First
             remote_id = self.send_remote_files(export_folder)
             # Send Motion
             self.send_notify(f"Motion Import: {motion_name}")
-            fps = get_fps()
             start_time: RTime = RGlobal.GetStartTime()
             end_time: RTime = RGlobal.GetEndTime()
-            start_frame = fps.GetFrameIndex(start_time)
-            end_frame = fps.GetFrameIndex(end_time)
+            start_frame = link_fps.GetFrameIndex(start_time)
+            end_frame = link_fps.GetFrameIndex(end_time)
             current_time: RTime = RGlobal.GetTime()
-            current_frame = fps.GetFrameIndex(current_time)
+            current_frame = link_fps.GetFrameIndex(current_time)
             export_data = encode_from_json({
                 "path": export_path,
                 "remote_id": remote_id,
                 "name": actor.name,
                 "type": actor.get_type(),
                 "link_id": actor.get_link_id(),
-                "fps": fps.ToFloat(),
+                "fps": link_fps.ToFloat(),
                 "start_time": start_time.ToInt(),
                 "end_time": end_time.ToInt(),
                 "start_frame": start_frame,
@@ -2546,16 +2585,16 @@ class DataLink(QObject):
         return encode_from_json(character_template)
 
     def encode_pose_data(self, actors):
-        fps = get_fps()
+        link_fps = self.get_link_fps()
         start_time: RTime = RGlobal.GetStartTime()
         end_time: RTime = RGlobal.GetEndTime()
-        start_frame = fps.GetFrameIndex(start_time)
-        end_frame = fps.GetFrameIndex(end_time)
+        start_frame = link_fps.GetFrameIndex(start_time)
+        end_frame = link_fps.GetFrameIndex(end_time)
         current_time: RTime = RGlobal.GetTime()
-        current_frame = fps.GetFrameIndex(current_time)
+        current_frame = link_fps.GetFrameIndex(current_time)
         actors_data = []
         data = {
-            "fps": fps.ToFloat(),
+            "fps": link_fps.ToFloat(),
             "start_time": start_time.ToInt(),
             "end_time": end_time.ToInt(),
             "start_frame": start_frame,
@@ -2575,8 +2614,10 @@ class DataLink(QObject):
         return encode_from_json(data)
 
     def encode_pose_frame_data(self, actors: list):
+        link_fps = self.get_link_fps()
         data = bytearray()
-        data += struct.pack("!II", len(actors), get_current_frame())
+        frame = link_fps.GetFrameIndex(time)
+        data += struct.pack("!II", len(actors), frame)
         actor: LinkActor
         for actor in actors:
             SC: RISkeletonComponent = actor.get_skeleton_component()
@@ -2645,16 +2686,16 @@ class DataLink(QObject):
         return data
 
     def encode_sequence_data(self, actors, aborted=False):
-        fps = get_fps()
+        link_fps = self.get_link_fps()
         start_time: RTime = RGlobal.GetStartTime()
         end_time: RTime = RGlobal.GetEndTime()
-        start_frame = fps.GetFrameIndex(start_time)
-        end_frame = fps.GetFrameIndex(end_time)
+        start_frame = link_fps.GetFrameIndex(start_time)
+        end_frame = link_fps.GetFrameIndex(end_time)
         current_time: RTime = RGlobal.GetTime()
-        current_frame = fps.GetFrameIndex(current_time)
+        current_frame = link_fps.GetFrameIndex(current_time)
         actors_data = []
         data = {
-            "fps": fps.ToFloat(),
+            "fps": link_fps.ToFloat(),
             "start_time": start_time.ToInt(),
             "end_time": end_time.ToInt(),
             "start_frame": start_frame,
@@ -2817,11 +2858,11 @@ class DataLink(QObject):
         # Different from Blender Pipeline
         self.update_link_status(f"Synchronizing View Camera")
         self.send_notify(f"Sync View Camera")
-        fps = get_fps()
+        link_fps = self.get_link_fps()
         time: RTime = RGlobal.GetTime()
-        frame = fps.GetFrameIndex(time)
+        frame = link_fps.GetFrameIndex(time)
         view_camera: RICamera = RScene.GetCurrentCamera()
-        camera_data = cc.get_camera_data(view_camera, frame)
+        camera_data = cc.get_camera_data(view_camera, link_fps, frame)
         if camera_data:
             pivot = self.get_selection_pivot()
             camera_data["target"] = [pivot.x, pivot.y, pivot.z]
@@ -2847,15 +2888,15 @@ class DataLink(QObject):
 
     def send_frame_sync(self):
         self.update_link_status(f"Sending Frame Sync")
-        fps = get_fps()
+        link_fps = self.get_link_fps()
         start_time = RGlobal.GetStartTime()
         end_time = RGlobal.GetEndTime()
         current_time = RGlobal.GetTime()
-        start_frame = fps.GetFrameIndex(start_time)
-        end_frame = fps.GetFrameIndex(end_time)
-        current_frame = fps.GetFrameIndex(current_time)
+        start_frame = link_fps.GetFrameIndex(start_time)
+        end_frame = link_fps.GetFrameIndex(end_time)
+        current_frame = link_fps.GetFrameIndex(current_time)
         frame_data = {
-            "fps": fps.ToFloat(),
+            "fps": link_fps.ToFloat(),
             "start_time": start_time.ToInt(),
             "end_time": end_time.ToInt(),
             "current_time": current_time.ToInt(),
@@ -2869,14 +2910,15 @@ class DataLink(QObject):
     def receive_frame_sync(self, data):
         self.update_link_status(f"Frame Sync Receveived")
         frame_data = decode_to_json(data)
+        link_fps = self.get_link_fps()
         start_frame = frame_data["start_frame"]
         end_frame = frame_data["end_frame"]
         current_frame = frame_data["current_frame"]
         end_frame = max(current_frame, end_frame)
         start_frame = min(current_frame, start_frame)
-        start_time = get_frame_time(start_frame)
-        end_time = get_frame_time(end_frame)
-        current_time = get_frame_time(current_frame)
+        start_time = get_frame_time(start_frame, link_fps)
+        end_time = get_frame_time(end_frame, link_fps)
+        current_time = get_frame_time(current_frame, link_fps)
         RGlobal.SetStartTime(start_time)
         RGlobal.SetEndTime(end_time)
         RGlobal.SetTime(current_time)
@@ -2988,8 +3030,9 @@ class DataLink(QObject):
 
     def abort_sequence(self):
         if self.is_sequence_running():
+            link_fps = self.get_link_fps()
             # as the next frame was never sent
-            self.data.sequence_current_frame_time = prev_frame(self.data.sequence_current_frame_time)
+            self.data.sequence_current_frame_time = prev_frame(self.data.sequence_current_frame_time, link_fps)
             self.data.sequence_current_frame -= 1
             self.update_link_status(f"Sequence Aborted: {self.data.sequence_current_frame}")
             self.stop_sequence()
@@ -3014,10 +3057,11 @@ class DataLink(QObject):
                 self.data.sequence_current_frame_time = reset_animation()
             else:
                 self.data.sequence_current_frame_time = RGlobal.GetTime()
-            current_frame = get_current_frame()
+            link_fps = self.get_link_fps()
+            current_frame = get_current_frame(link_fps)
             self.data.sequence_current_frame = current_frame
             self.data.sequence_start_frame = current_frame
-            self.data.sequence_end_frame = get_end_frame()
+            self.data.sequence_end_frame = get_end_frame(link_fps)
             # send animation meta data
             sequence_data = self.encode_sequence_data(actors)
             self.send(OpCodes.SEQUENCE, sequence_data)
@@ -3040,20 +3084,21 @@ class DataLink(QObject):
         # which slows down the sequence, so don't use it unless we have to.
         if RScene.GetSelectedObjects():
             RScene.ClearSelectObjects()
-        current_frame = get_current_frame()
-        self.data.sequence_current_frame = current_frame
-        self.update_link_status(f"Sending Sequence Frame: {current_frame}", log=False)
-        num_frames = current_frame - self.data.sequence_start_frame
+        link_fps = self.get_link_fps()
+        link_frame = get_current_frame(link_fps)
+        self.data.sequence_current_frame = link_frame
+        self.update_link_status(f"Sending Sequence Frame: {link_frame}", log=False)
+        num_frames = link_frame - self.data.sequence_start_frame
         # send current sequence frame actor poses
         pose_data = self.encode_pose_frame_data(self.data.sequence_actors)
         self.send(OpCodes.SEQUENCE_FRAME, pose_data)
         # check for end
-        if current_frame >= get_end_frame():
+        if link_frame >= get_end_frame(link_fps):
             self.send_sequence_end()
             self.stop_sequence()
             return
         # advance to next frame
-        self.data.sequence_current_frame_time = next_frame(self.data.sequence_current_frame_time)
+        self.data.sequence_current_frame_time = next_frame(self.data.sequence_current_frame_time, link_fps)
 
     def send_sequence_end(self, aborted=False):
         actors = self.data.sequence_actors
@@ -3066,10 +3111,10 @@ class DataLink(QObject):
             RScene.SelectObjects(self.data.stored_selection)
         self.update_link_status(f"Sequence Sent: {num_frames} frames")
 
-    def prep_actor_clip(self, actor: LinkActor, start_time, num_frames, start_frame, end_frame):
+    def prep_pose_actor(self, actor: LinkActor, start_time, num_frames, start_frame, end_frame):
         """Creates an empty clip and grabs the t-pose data for the character"""
 
-        fps = get_fps()
+        fps = get_local_fps()
         RGlobal.RemoveAllAnimations(actor.object)
 
         clip: RIClip
@@ -3227,6 +3272,7 @@ class DataLink(QObject):
     def receive_pose(self, data):
         self.update_link_status(f"Receiving Pose ...")
         json_data = decode_to_json(data)
+        link_fps = self.get_link_fps()
         frame = json_data["frame"]
         start_frame = json_data["start_frame"]
         end_frame = json_data["end_frame"]
@@ -3234,9 +3280,9 @@ class DataLink(QObject):
         self.data.pose_frame = frame
         end_frame = max(frame + 1, end_frame)
         start_frame = min(frame, start_frame)
-        start_time = get_frame_time(start_frame)
-        end_time = get_frame_time(end_frame)
-        frame_time = get_frame_time(frame)
+        start_time = get_frame_time(start_frame, link_fps)
+        end_time = get_frame_time(end_frame, link_fps)
+        frame_time = get_frame_time(frame, link_fps)
         # extend project range
         extend_project_range(end_time)
         # move to the start frame
@@ -3253,7 +3299,7 @@ class DataLink(QObject):
             link_id = actor_data["link_id"]
             actor = LinkActor.find_actor(link_id, search_name=name, search_type=character_type)
             if actor:
-                self.prep_actor_clip(actor, frame_time, 1, start_frame, end_frame)
+                self.prep_pose_actor(actor, frame_time, 1, start_frame, end_frame)
                 actors.append(actor)
         self.data.sequence_actors = actors
         # refresh actor timelines
@@ -3264,8 +3310,9 @@ class DataLink(QObject):
         if not pose_frame_data:
             return
         frame = pose_frame_data["frame"]
-        scene_time = get_frame_time(frame)
-        scene_time2 = get_frame_time(frame+1)
+        link_fps = self.get_link_fps()
+        scene_time = get_frame_time(frame, link_fps)
+        scene_time2 = get_frame_time(frame+1, link_fps)
         if scene_time2 > RGlobal.GetEndTime():
             RGlobal.SetEndTime(scene_time2)
         if scene_time < RGlobal.GetStartTime():
@@ -3292,13 +3339,14 @@ class DataLink(QObject):
         self.update_link_status(f"Receiving Live Sequence ...")
         json_data = decode_to_json(data)
         # sequence frame range
+        link_fps = self.get_link_fps()
         start_frame = json_data["start_frame"]
         end_frame = json_data["end_frame"]
         self.data.sequence_start_frame = start_frame
         self.data.sequence_end_frame = end_frame
         num_frames = self.data.sequence_end_frame - self.data.sequence_start_frame + 1
-        start_time = get_frame_time(self.data.sequence_start_frame)
-        end_time = get_frame_time(self.data.sequence_end_frame)
+        start_time = get_frame_time(self.data.sequence_start_frame, link_fps)
+        end_time = get_frame_time(self.data.sequence_end_frame, link_fps)
         # extend project range
         extend_project_range(end_time)
         # move to start of timeline
@@ -3316,7 +3364,7 @@ class DataLink(QObject):
             link_id = actor_data["link_id"]
             actor = LinkActor.find_actor(link_id, search_name=name, search_type=character_type)
             if actor:
-                self.prep_actor_clip(actor, start_time, num_frames, start_frame, end_frame)
+                self.prep_pose_actor(actor, start_time, num_frames, start_frame, end_frame)
                 actor.begin_editing()
                 actors.append(actor)
         self.data.sequence_actors = actors
@@ -3325,7 +3373,7 @@ class DataLink(QObject):
         # refresh actor timelines
         refresh_timeline(actors)
         # move to end of range
-        RGlobal.SetTime(get_frame_time(self.data.sequence_end_frame))
+        RGlobal.SetTime(get_frame_time(self.data.sequence_end_frame, link_fps))
         # start the sequence
         self.start_sequence()
         #utils.start_timer("apply_world_fk_pose")
@@ -3339,8 +3387,9 @@ class DataLink(QObject):
         # clear selected objects, only if needed as this triggers UI updates
         if RScene.GetSelectedObjects():
             RScene.ClearSelectObjects()
+        link_fps = self.get_link_fps()
         frame = sequence_frame_data["frame"]
-        scene_time = get_frame_time(frame)
+        scene_time = get_frame_time(frame, link_fps)
         if scene_time > RGlobal.GetEndTime():
             RGlobal.SetEndTime(scene_time)
         if scene_time < RGlobal.GetStartTime():
@@ -3368,13 +3417,14 @@ class DataLink(QObject):
 
     def receive_sequence_end(self, data):
         json_data = decode_to_json(data)
+        link_fps = self.get_link_fps()
         frame = json_data["frame"]
         aborted = json_data.get("aborted", False)
         self.data.sequence_end_frame = frame
         num_frames = self.data.sequence_end_frame - self.data.sequence_start_frame
         self.stop_sequence()
-        scene_start_time = get_frame_time(self.data.sequence_start_frame)
-        scene_end_time = get_frame_time(self.data.sequence_end_frame)
+        scene_start_time = get_frame_time(self.data.sequence_start_frame, link_fps)
+        scene_end_time = get_frame_time(self.data.sequence_end_frame, link_fps)
         actor: LinkActor
         RScene.ClearSelectObjects()
         for actor in self.data.sequence_actors:
@@ -3391,11 +3441,13 @@ class DataLink(QObject):
         #utils.log_timer("fetch_transforms", name="fetch_transforms")
 
     def receive_sequence_ack(self, data):
+        OPTS = options.get_opts()
+
         json_data = decode_to_json(data)
         ack_frame = json_data["frame"]
         server_rate = json_data["rate"]
         delta_frames = self.data.sequence_current_frame - ack_frame
-        if prefs.MATCH_CLIENT_RATE:
+        if OPTS.MATCH_CLIENT_RATE:
             if self.data.ack_time == 0.0:
                 self.data.ack_time = time.time()
                 self.data.ack_rate = 120

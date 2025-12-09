@@ -1909,19 +1909,17 @@ def is_camera(obj):
     return False
 
 
-def begin_timeline_scan():
+def begin_timeline_scan(fps: RFps):
     start_time: RTime = RGlobal.GetStartTime()
     RGlobal.SetTime(start_time)
     current_time: RTime = RGlobal.GetTime()
-    fps: RFps = RGlobal.GetFps()
     current_frame = fps.GetFrameIndex(current_time)
     return current_time, current_frame
 
 
-def next_timeline_scan():
+def next_timeline_scan(fps: RFps):
     end_time: RTime = RGlobal.GetEndTime()
     current_time: RTime = RGlobal.GetTime()
-    fps: RFps = RGlobal.GetFps()
     if current_time.ToInt() < end_time.ToInt():
         next_time = fps.GetNextFrameTime(current_time)
         next_frame = fps.GetFrameIndex(next_time)
@@ -1936,17 +1934,17 @@ def end_timeline_scan(current_time):
     RGlobal.SetTime(current_time)
 
 
-def get_all_camera_light_data(no_animation=False):
+def get_all_camera_light_data(no_animation=False, fps: RFps=None):
     lights = RScene.FindObjects(EObjectType_Light | EObjectType_DirectionalLight |
                                 EObjectType_SpotLight | EObjectType_PointLight)
     cameras = RScene.FindObjects(EObjectType_Camera)
-    fps: RFps = RGlobal.GetFps()
+    if not fps:
+        fps: RFps = RGlobal.GetFps()
     switch_data = RScene.GetSwitchCameraFrameIndexs(fps)
     all_data = []
     if lights or cameras:
         if no_animation:
             time = RGlobal.GetTime()
-            fps: RFps = RGlobal.GetFps()
             frame = fps.GetFrameIndex(time)
             frame_lights = []
             frame_cameras = []
@@ -1961,12 +1959,12 @@ def get_all_camera_light_data(no_animation=False):
                 if light_data:
                     frame_lights.append(light_data)
             for camera in cameras:
-                camera_data = get_camera_data(camera, frame, switch_data)
+                camera_data = get_camera_data(camera, fps, frame, switch_data)
                 if camera_data:
                     frame_cameras.append(camera_data)
             all_data.append(frame_data)
         else:
-            time, frame = begin_timeline_scan()
+            time, frame = begin_timeline_scan(fps)
             start_time = time
             is_next = True
             while is_next:
@@ -1983,11 +1981,11 @@ def get_all_camera_light_data(no_animation=False):
                     if light_data:
                         frame_lights.append(light_data)
                 for camera in cameras:
-                    camera_data = get_camera_data(camera, frame, switch_data)
+                    camera_data = get_camera_data(camera, fps, frame, switch_data)
                     if camera_data:
                         frame_cameras.append(camera_data)
                 all_data.append(frame_data)
-                is_next, time, frame = next_timeline_scan()
+                is_next, time, frame = next_timeline_scan(fps)
             end_timeline_scan(start_time)
     return all_data
 
@@ -2226,9 +2224,8 @@ def is_camera_switch_active(camera: RICamera, frame, switch_data):
     return False
 
 
-def get_camera_data(camera: RICamera, frame, switch_data = None):
+def get_camera_data(camera: RICamera, fps: RFps, frame, switch_data = None):
     if switch_data is None:
-        fps: RFps = RGlobal.GetFps()
         switch_data = RScene.GetSwitchCameraFrameIndexs(fps)
     T = type(camera)
     if T is not RICamera:

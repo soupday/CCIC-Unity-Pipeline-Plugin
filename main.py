@@ -15,7 +15,7 @@
 # along with CC/iC-Unity-Pipeline-Plugin.  If not, see <https://www.gnu.org/licenses/>.
 
 
-from utp import prefs, qt, importer, exporter, link, cc, tests, utils, vars
+from utp import vars, prefs, options, utils, cc, qt, tests, importer, exporter, link
 
 
 rl_plugin_info = { "ap": "iClone", "ap_version": "8.0" }
@@ -26,6 +26,7 @@ BLOCK_UPDATE = False
 
 def initialize_plugin():
     global BLOCK_UPDATE
+    OPTS = options.get_opts()
 
     BLOCK_UPDATE = True
 
@@ -58,7 +59,7 @@ def initialize_plugin():
     qt.add_toolbar_separator(toolbar)
     qt.add_toolbar_action(toolbar, icon_settings, "Unity Pipeline Settings", action=menu_settings, toggle=True)
 
-    if prefs.AUTO_START_SERVICE:
+    if OPTS.AUTO_START_SERVICE:
         link.link_auto_start()
 
     BLOCK_UPDATE = False
@@ -131,7 +132,7 @@ def menu_reload():
     import importlib
     print("Reloading Scripts...")
     running, visible = link.link_stop()
-    modules = [ vars, prefs, utils, cc, qt, tests, importer, exporter, link ]
+    modules = [ vars, prefs, options, utils, cc, qt, tests, importer, exporter, link ]
     for module in modules:
         importlib.reload(module)
     print("Done Reloading Scripts.")
