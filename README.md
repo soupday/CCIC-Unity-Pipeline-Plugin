@@ -46,9 +46,9 @@ Changelog
 
 ### 2.1.1
 - Re-link function added.
-- Send motions when character not present in Unity.
-- Delete hidden faces defaults to True.
+- Send motions allowed when character not present in Unity.
 - Camera switch data fix to camera exports.
+- Frame Rate export options added.
 
 ### 2.1.0
 - First release
