@@ -44,6 +44,9 @@ Links
 Changelog
 =========
 
+### 2.2.0
+- Shader name fix.
+
 ### 2.1.1
 - Re-link function added.
 - Send motions allowed when character not present in Unity.
