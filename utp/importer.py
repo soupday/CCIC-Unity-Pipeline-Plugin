@@ -398,8 +398,8 @@ class Importer:
                 wanted_shader = M.mat_json.get_shader()
                 # SSS skin on gamebase does not re-import correctly, use Pbr instead
                 # TODO Testing if this is fixed - It isn't.
-                if wanted_shader == "RLSSS" and M.mat_name.startswith("Ga_Skin_"):
-                    wanted_shader = "Pbr"
+                #if wanted_shader == "RLSSS" and M.mat_name.startswith("Ga_Skin_"):
+                #    wanted_shader = "Pbr"
                 if current_shader != wanted_shader:
                     utils.log_info(f"Changing shader ({M.obj_name} / {M.mat_name}): {current_shader} to {wanted_shader}")
                     if not M.set_shader(wanted_shader):
