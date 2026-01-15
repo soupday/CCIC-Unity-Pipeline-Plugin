@@ -2157,7 +2157,10 @@ def get_light_data(light: RILight):
 
     if spot_light:
         light_range = spot_light.GetRange()
-        status, angle, falloff, attenuation = spot_light.GetSpotLightBeam(angle, falloff, attenuation)
+        try:
+            status, angle, falloff, attenuation = spot_light.GetSpotLightBeam(angle, falloff, attenuation)
+        except:
+            ...
         transmission = spot_light.GetTransmission()
         inverse_square = spot_light.GetInverseSquare()
         is_tube = spot_light.IsTubeShape()
