@@ -28,8 +28,8 @@ $subFolder = "OpenPlugin"
 
 # script vars
 $scriptFolder = $PSScriptRoot
-#$scriptFolderName = Split-Path -Path $scriptFolder -Leaf
 $scriptFolderName = "Unity Pipeline Plugin"
+$isGitClone = Test-Path -Path "$scriptFolder\.git"
 
 function Add-Junction($keyPath){
     $keyExists = Test-Path -Path $keyPath
@@ -53,7 +53,6 @@ function Add-Junction($keyPath){
             }
 
             # is this a Git Clone? Install as junction, otherwise install as full copy
-            $isGitClone = Test-Path -Path "$scriptFolder\.git"
             if ($isGitClone){
                 Write-Host "`n Installing Git Clone Plugin as junction link."
             }else{
@@ -87,9 +86,15 @@ function Add-Junction($keyPath){
     }
 }
 
-Write-Host "`n************************************************************************"
-Write-Host "`n This script will create links that allow iClone/Character Creator`n to use the plugin contained in this folder - Please ensure that this`n folder stays in its current location (or the links will break).`n`n [If you need to move the folder then run the Uninstall.bat file before`n re-running the Install.bat file.]"
-Write-Host "`n************************************************************************`n"
+if ($isGitClone){
+    Write-Host "`n************************************************************************"
+    Write-Host "`n This script will create links that allow iClone/Character Creator`n to use the plugin contained in this folder - Please ensure that this`n folder stays in its current location (or the links will break).`n`n [If you need to move the folder then run the Uninstall.bat file before`n re-running the Install.bat file.]"
+    Write-Host "`n************************************************************************`n"
+}else{
+    Write-Host "`n************************************************************************"
+    Write-Host "`n This script will install the files that allow iClone/Character Creator`n to use the plugin contained in this folder."
+    Write-Host "`n************************************************************************`n"
+}
 
 $keyPaths = @($iCloneKeyPath, $charCreatorKeyPath, $charCreatorFiveKeyPath)
 

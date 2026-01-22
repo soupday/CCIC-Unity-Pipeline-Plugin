@@ -90,7 +90,7 @@ class Options():
                 self.MATCH_CLIENT_RATE = get_attr(temp_state_json, "match_client_rate", True)
                 self.DATALINK_FRAME_SYNC = get_attr(temp_state_json, "datalink_frame_sync", False)
                 self.CC_DELETE_HIDDEN_FACES = get_attr(temp_state_json, "cc_delete_hidden_faces", False)
-                self.CC_BAKE_TEXTURES = get_attr(temp_state_json, "cc_bake_textures", False)
+                self.CC_BAKE_TEXTURES = get_attr(temp_state_json, "cc_bake_textures", True)
                 self.IC_DELETE_HIDDEN_FACES = get_attr(temp_state_json, "ic_delete_hidden_faces", True)
                 self.IC_BAKE_TEXTURES = get_attr(temp_state_json, "ic_bake_textures", True)
                 self.CC_EXPORT_MODE = get_attr(temp_state_json, "cc_export_mode", "Animation")
