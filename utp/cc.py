@@ -17,7 +17,8 @@
 from RLPy import *
 del abs
 import os, json, math
-from . import utils, vars
+from . import vars, utils
+from . error import ErrorCode, error_report, error_reset, error_show
 from enum import IntEnum
 
 
@@ -1003,6 +1004,7 @@ def get_avatar_mesh_materials(avatar, exclude_mesh_names=None, exclude_material_
                               exact=False):
 
     mesh_materials = []
+    done = []
 
     if avatar:
 
@@ -1025,6 +1027,11 @@ def get_avatar_mesh_materials(avatar, exclude_mesh_names=None, exclude_material_
             obj = find_actor_object(avatar, mesh_name)
             if obj:
 
+                oid = (obj.GetID(), mesh_name)
+                if oid in done:
+                    continue
+                done.append(oid)
+
                 utils.log_info(f"Actor Object: {obj.GetName()} ({mesh_name})")
                 utils.log_indent()
 
@@ -1036,6 +1043,12 @@ def get_avatar_mesh_materials(avatar, exclude_mesh_names=None, exclude_material_
 
                     if material_filter and material_filter(mesh_name):
                         continue
+
+                    mid = (obj.GetID(), mesh_name, mat_name)
+                    if mid in done:
+                        utils.log_info(f" - Skipping Duplicate! ({mid})")
+                        continue
+                    done.append(mid)
 
                     utils.log_info(f"Mesh / Material: {mesh_name} / {mat_name}")
                     utils.log_indent()
@@ -1059,78 +1072,140 @@ def get_avatar_mesh_materials(avatar, exclude_mesh_names=None, exclude_material_
     return mesh_materials
 
 
-def is_cc():
-    return RApplication.GetProductName() == "Character Creator"
+def get_version_float():
+    product_version = RApplication.GetProductVersion()
+    return product_version[0] + product_version[1]/100
 
 
-def is_iclone():
-    return RApplication.GetProductName() == "iClone"
+def is_cc(version: float=None):
+    if version:
+        fver = get_version_float()
+        return RApplication.GetProductName() == "Character Creator" and fver >= version
+    else:
+        return RApplication.GetProductName() == "Character Creator"
+
+
+def is_iclone(version: float=None):
+    if version:
+        fver = get_version_float()
+        return RApplication.GetProductName() == "iClone" and fver >= version
+    else:
+        return RApplication.GetProductName() == "iClone"
 
 
 def find_actor_source_meshes(imported_mesh_name, imported_obj_name, actor: RIAvatar):
-        objects = get_actor_objects(actor)
-        try_names = set()
-        try_names.add(imported_mesh_name)
-        try_names.add(safe_export_name(imported_mesh_name))
+    # Anything sent to Blender will have it's mesh name changed to it's object name
+    # from Blender: imported_mesh_name will nearly always be the same as imported_obj_name (unless the user has changed them)
+    # - which will match the CC object name, but not nescessarily the mesh name
+    # - Anything imported via the transformer will have "_Shape" appended to the object name, but not the mesh name
+    # - Accessory bones can cause accessories object / mesh names to be appended with duplication suffixes _0 _1 _2 etc ...
 
-        # accessories can cause mesh renames with _0 _1 _2 suffixes added
-        if imported_mesh_name[-1].isdigit() and imported_mesh_name[-2] == "_":
-            try_names.add(imported_mesh_name[:-2])
-        safe_imported_obj_name = imported_obj_name
-        if imported_obj_name:
-            safe_imported_obj_name = safe_export_name(imported_obj_name)
-            try_names.add(imported_obj_name)
-            try_names.add(safe_imported_obj_name)
+    objects = get_actor_objects(actor)
+    try_names = set()
+    try_names.add(imported_mesh_name)
+    try_names.add(safe_export_name(imported_mesh_name))
 
-        #utils.log_info(f"Try Names: {try_names}")
+    # accessories can cause mesh renames with _0 _1 _2 suffixes added
+    if imported_mesh_name[-1].isdigit() and imported_mesh_name[-2] == "_":
+        try_names.add(imported_mesh_name[:-2])
+    if imported_mesh_name.endswith("_Shape"):
+        try_names.add(imported_mesh_name[:-6])
+    safe_imported_obj_name = imported_obj_name
+    if imported_obj_name:
+        safe_imported_obj_name = safe_export_name(imported_obj_name)
+        try_names.add(imported_obj_name)
+        try_names.add(safe_imported_obj_name)
+        if imported_obj_name.endswith("_Shape"):
+            try_names.add(imported_obj_name[:-6])
 
-        # first try to match mesh names directly
-        for obj in objects:
-            obj_name = obj.GetName()
-            rl_meshes = obj.GetMeshNames()
-            if rl_meshes:
-                #utils.log_info(f"Object: {obj.GetName()}, Mesh Names: {rl_meshes}")
-                for mesh_name in rl_meshes:
-                    if mesh_name in try_names:
-                        return [mesh_name]
+    utils.log_info(f"Try Names: {try_names}")
 
-        # then try to match object names
-        if imported_obj_name:
-            for obj in objects:
-                obj_name = obj.GetName()
-                if obj_name == imported_obj_name or obj_name == safe_imported_obj_name:
-                    return obj.GetMeshNames()
+    found = []
+    done_ids = set()
 
-        # try a partial match, but only if there is only one result
-        partial_mesh_match = None
-        partial_mesh_count = 0
-        for obj in objects:
-            obj_name = obj.GetName()
-            rl_meshes = obj.GetMeshNames()
-            for mesh_name in rl_meshes:
-                for try_name in try_names:
-                    if try_name in mesh_name:
-                        partial_mesh_count += 1
-                        if not partial_mesh_match:
-                            partial_mesh_match = mesh_name
-                        # only count 1 match per try set
-                        break
-        if partial_mesh_count == 1:
-            return [partial_mesh_match]
+    #
 
-        # try a partial match on the object names
-        partial_obj_match = None
-        partial_obj_count = 0
-        for obj in objects:
-            obj_name = obj.GetName()
-            for imported_obj_name in obj_name or safe_imported_obj_name in obj_name:
-                partial_obj_count += 1
-                if not partial_obj_match:
-                    partial_obj_match = obj
-        if partial_obj_count == 1:
-            return partial_obj_match.GetMeshNames()
+    # first try to match object name and mesh name
+    obj: RIObject
+    for obj in objects:
+        meshes = obj.GetMeshes()
+        obj_name = obj.GetName()
+        if obj_name in try_names:
+            for mesh in meshes:
+                if mesh.GetName() in try_names:
+                    if mesh.GetID() not in done_ids:
+                        print(f"Matching object name: {obj.GetName()} mesh name: {mesh.GetName()} ({mesh.GetID()})")
+                        found.append(mesh)
+                        done_ids.add(mesh.GetID())
 
-        return []
+    # then just match mesh name
+    for obj in objects:
+        meshes = obj.GetMeshes()
+        for mesh in meshes:
+            if mesh.GetName() in try_names:
+                if mesh.GetID() not in done_ids:
+                    print(f"Matching just mesh name: {mesh.GetName()} ({mesh.GetID()}) in {obj.GetName()}")
+                    found.append(mesh)
+                    done_ids.add(mesh.GetID())
+
+    if found:
+        return found
+
+    # then try partial mesh name matches
+    for obj in objects:
+        meshes = obj.GetMeshes()
+        for mesh in meshes:
+            mesh_name = mesh.GetName()
+            for try_name in try_names:
+                if try_name.startswith(mesh_name) or mesh_name.startswith(try_name):
+                    if mesh.GetID() not in done_ids:
+                        print(f"Partial matching {try_name} on mesh name: {mesh.GetName()} ({mesh.GetID()}) in {obj.GetName()}")
+                        found.append(mesh)
+                        done_ids.add(mesh.GetID())
+
+    # finally if the object name matches, add all the meshes inside it
+    for obj in objects:
+        meshes = obj.GetMeshes()
+        obj_name = obj.GetName()
+        if obj_name in try_names:
+            for mesh in meshes:
+                if mesh.GetID() not in done_ids:
+                    print(f"Adding all: {mesh.GetName()} ({mesh.GetID()}) from {obj.GetName()}")
+                    found.append(mesh)
+                    done_ids.add(mesh.GetID())
+
+    return found
+
+
+def safe_replace_mesh(avatar: RIAvatar, mesh: RIMesh,
+                      obj_name: str, cc_mesh_name: str, obj_file_path: str):
+    """When replacing meshes sent from Blender. The .obj file name and mesh name
+       will be the name of the *object*. The ReplaceMesh API functions work on the
+       name of the *mesh*, which is often not the same as the object name.
+       This needs to be changed to the name of the mesh to be replaced in CC,
+       both the file name and mesh name in the .obj file itself."""
+
+    # copy .obj to temp file and rename the line "o <obj_mesh_name>" to "o <cc_mesh_name>"
+    temp_obj_folder = temp_files_path("Mesh Replace", create=True)
+    temp_obj_path = os.path.join(temp_obj_folder, f"{cc_mesh_name}.obj")
+    utils.search_replace_file(obj_file_path,
+                              f"o {obj_name}",
+                              f"o {cc_mesh_name}",
+                              temp_obj_path)
+    status = None
+    # for clothing, accessories, only RIMesh.ReplaceMesh works ...
+    try:
+        if status != RStatus.Success:
+            status: RStatus = mesh.ReplaceMesh(temp_obj_path, EReplaceMeshOption_YUp, True, True)
+    except: ...
+    # for avatar body meshes, only RIAvatar.ReplaceMesh works ...
+    try:
+        if status != RStatus.Success:
+            status: RStatus = avatar.ReplaceMesh(cc_mesh_name, obj_file_path, True, False)
+    except: ...
+    # delete temp .obj file
+    os.unlink(temp_obj_path)
+    return (status and status == RStatus.Success)
 
 
 def get_first_avatar():
@@ -1149,6 +1224,16 @@ def get_selected_avatars():
         if obj in all_avatars and obj not in avatars:
             avatars.append(obj)
     return avatars
+
+
+def get_selected_props():
+    objects = get_selected_actor_objects()
+    all_props = RScene.GetProps() + RScene.GetMDProps()
+    props = []
+    for obj in objects:
+        if obj in all_props and obj not in props:
+            props.append(obj)
+    return props
 
 
 def get_selected_sendable(obj: RIObject):
@@ -1992,30 +2077,43 @@ def get_all_camera_light_data(no_animation=False, fps: RFps=None):
 
 IGNORE_NODES = ["RL_BoneRoot", "IKSolverDummy", "NodeForExpressionLookAtSolver"]
 
+def append_if(list: list, item):
+    if item not in list:
+        list.append(item)
+    return list
+
+def extend_if(base: list, list: list):
+    for item in list:
+        if item not in base:
+            base.append(item)
+    return base
+
 def get_actor_objects(actor):
     objects = []
     T = type(actor)
     if actor and (T is RIAvatar or T is RILightAvatar):
         avatar: RIAvatar = actor
-        objects.extend(avatar.GetClothes())
-        objects.extend(avatar.GetAccessories())
-        objects.extend(avatar.GetHairs())
+        #if avatar.GetAvatarType() != EAvatarType_Standard:
+        #    append_if(objects, avatar)
+        append_if(objects, avatar)
+        extend_if(objects, avatar.GetClothes())
+        extend_if(objects, avatar.GetAccessories())
+        extend_if(objects, avatar.GetHairs())
         child_objects = RScene.FindChildObjects(actor, EObjectType_Avatar)
         for obj in child_objects:
             name = obj.GetName()
-            if name not in IGNORE_NODES and obj not in objects:
-                objects.append(obj)
-        if avatar.GetAvatarType() != EAvatarType_Standard:
-            objects.append(avatar)
+            if name not in IGNORE_NODES:
+                append_if(objects, obj)
 
     elif actor and (T is RIProp or T is RIMDProp):
         child_objects = RScene.FindChildObjects(actor, EObjectType_Avatar)
+        append_if(objects, actor)
         for obj in child_objects:
             name = obj.GetName()
-            if name not in IGNORE_NODES and obj not in objects:
-                objects.append(obj)
+            if name not in IGNORE_NODES:
+                append_if(objects, obj)
     else:
-        objects.append(actor)
+        append_if(objects, actor)
 
     return objects
 
@@ -2140,15 +2238,15 @@ def get_light_data(light: RILight):
     multiplier: float = light.GetMultiplier()
     current_time = RGlobal.GetTime()
 
-    light_range: float = 1000
-    angle: float = 0
-    falloff: float = 100
-    attenuation: float = 100
+    light_range: float = 1000.0
+    angle: float = 60.0
+    falloff: float = 100.0
+    attenuation: float = 100.0
     transmission: bool = False
     is_tube: bool = False
-    tube_length: float = 0
-    tube_radius: float = 0
-    tube_soft_radius: float = 0
+    tube_length: float = 0.0
+    tube_radius: float = 0.0
+    tube_soft_radius: float = 0.0
     is_rectangle: bool = False
     rect: RVector2 = RVector2(0,0)
     cast_shadow: bool = False
@@ -2160,7 +2258,7 @@ def get_light_data(light: RILight):
         try:
             status, angle, falloff, attenuation = spot_light.GetSpotLightBeam(angle, falloff, attenuation)
         except:
-            ...
+            error_report(ErrorCode.SPOTLIGHT_01)
         transmission = spot_light.GetTransmission()
         inverse_square = spot_light.GetInverseSquare()
         is_tube = spot_light.IsTubeShape()

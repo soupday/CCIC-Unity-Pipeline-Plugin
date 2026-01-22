@@ -23,6 +23,7 @@ from shiboken2 import wrapInstance
 import os, socket, select, struct, time, json, atexit, traceback, shutil
 from . import vars, utils, cc, qt, options, prefs, tests, importer, exporter
 from . utils import LI, LW, LD, log_info, log_detail, log_warn, log_error
+from . error import ErrorCode, error_report, error_reset, error_show
 from enum import IntEnum
 import math
 
@@ -2000,6 +2001,7 @@ class DataLink(QObject):
             link_service.service_disconnect()
 
     def parse(self, op_code, data):
+        error_reset()
 
         if op_code == OpCodes.DEBUG:
             self.receive_debug(data)
@@ -2045,6 +2047,8 @@ class DataLink(QObject):
 
         if op_code == OpCodes.CONFIRM:
             self.receive_confirm(data)
+
+        error_show()
 
     def on_connected(self):
         self.update_ui()
@@ -3261,6 +3265,7 @@ class DataLink(QObject):
         self.send(OpCodes.CONFIRM, encode_from_json(json_data))
 
     def receive_confirm(self, data):
+        error_reset()
         json_data = decode_to_json(data)
         request_type = json_data["type"]
         actors_data = json_data["actors"]
@@ -3270,6 +3275,7 @@ class DataLink(QObject):
             id_tree = actor_data.get("id_tree")
         if request_type in ["SCENE", "MOTIONS", "ACTORS"]:
             self.do_send_update_actors(actors_data, request_type)
+        error_show()
         return
 
     def receive_pose(self, data):
