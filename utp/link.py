@@ -1937,7 +1937,7 @@ class DataLink(QObject):
             else:
                 self.button_link.setStyleSheet(qt.STYLE_BUTTON_ACTIVE)
                 self.button_link.setText("Linked (Local)")
-            self.label_header.setText(f"Connected to {link_service.remote_app} {link_service.remote_version} ({link_service.remote_package})")
+            self.label_header.setText(f"Connected to {link_service.remote_app} {link_service.remote_version}")
             self.label_folder.setText(f"{self.get_remote_folder()}")
         elif self.is_listening():
             my_hostname = get_hostname() if not vars.DEV else vars.DEV_NAME
