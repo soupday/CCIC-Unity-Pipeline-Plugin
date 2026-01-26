@@ -44,6 +44,9 @@ Links
 Changelog
 =========
 
+### 2.2.1
+- Spotlight error fix.
+
 ### 2.2.0
 - Shader name fix.
 
