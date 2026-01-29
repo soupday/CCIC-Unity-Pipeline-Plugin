@@ -1509,6 +1509,10 @@ class DataLink(QObject):
     service: LinkService = None
     # Data
     data = LinkData()
+    #
+    enable_request_type_actors = True
+    enable_request_type_motions = True
+    enable_request_type_scene = True
 
 
     def __init__(self):
@@ -1844,6 +1848,13 @@ class DataLink(QObject):
             qt.enable(self.button_sync_lights, self.button_sync_cameras,
                       self.button_sync_viewport, self.button_sync_scene)
 
+        if not self.enable_request_type_actors:
+            qt.disable(self.button_send)
+        if not self.enable_request_type_motions:
+            qt.disable(self.button_animation)
+        if not self.enable_request_type_scene:
+            qt.disable(self.button_sync_scene)
+
         # context info
 
         if avatar:
@@ -1928,6 +1939,21 @@ class DataLink(QObject):
             OPTS.IC_EXPORT_MODE = self.combo_ccic_export_mode.currentText()
         OPTS.write_state()
 
+    def allow_request_type(self, request_type, enable):
+        if request_type == "ACTORS":
+            self.enable_request_type_actors = enable
+        elif request_type == "MOTIONS":
+            self.enable_request_type_motions = enable
+        elif request_type == "SCENE":
+            self.enable_request_type_scene = enable
+        self.update_ui()
+        return
+
+    def reset_request_types(self, enable=True):
+        self.enable_request_type_actors = enable
+        self.enable_request_type_motions = enable
+        self.enable_request_type_scene = enable
+
     def show_link_state(self):
         link_service = self.get_link_service()
         if self.is_connected():
@@ -1994,6 +2020,7 @@ class DataLink(QObject):
         link_service = self.get_link_service()
         if link_service:
             link_service.service_stop()
+            self.reset_request_types()
 
     def link_disconnect(self):
         link_service = self.get_link_service()
@@ -2052,6 +2079,7 @@ class DataLink(QObject):
 
     def on_connected(self):
         self.update_ui()
+        self.reset_request_types()
         self.send_notify("Connected")
 
     def send(self, op_code, data=None):
@@ -3233,7 +3261,7 @@ class DataLink(QObject):
         # get actors
         actors = self.get_selected_actors()
         if actors:
-            self.update_link_status(f"Sending Request")
+            self.update_link_status(f"Sending Request, waiting for response ...")
             self.send_notify(f"Request")
             # send request
             request_data = self.encode_request_data(actors, request_type)
@@ -3241,6 +3269,8 @@ class DataLink(QObject):
             # store the actors
             self.data.sequence_actors = actors
             self.data.sequence_type = request_type
+            # disable buttons for further requests ...
+            self.allow_request_type(request_type, False)
 
     def receive_request(self, data):
         self.update_link_status(f"Receiving Request ...")
@@ -3275,6 +3305,7 @@ class DataLink(QObject):
             id_tree = actor_data.get("id_tree")
         if request_type in ["SCENE", "MOTIONS", "ACTORS"]:
             self.do_send_update_actors(actors_data, request_type)
+            self.allow_request_type(request_type, True)
         error_show()
         return
 
