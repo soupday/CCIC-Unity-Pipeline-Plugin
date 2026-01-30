@@ -2075,6 +2075,9 @@ class DataLink(QObject):
         if op_code == OpCodes.CONFIRM:
             self.receive_confirm(data)
 
+        if op_code == OpCodes.RELINK:
+            self.receive_relink(data)
+
         error_show()
 
     def on_connected(self):
@@ -2422,6 +2425,17 @@ class DataLink(QObject):
         self.send(OpCodes.RELINK, relink_data)
         self.update_link_status(f"Relink Sent: {actor.name} {actor.get_link_id()}")
 
+    def receive_relink(self, data):
+        relink_data = decode_to_json(data)
+        utils.log_info(f"relink reply: {relink_data}")
+        from_link_id = relink_data.get("link_id")
+        to_link_id = relink_data.get("to_link_id")
+        source_name = relink_data.get("name")
+        actor = LinkActor.find_actor(from_link_id, search_name=source_name)
+        if actor:
+            actor.set_link_id(to_link_id)
+            self.update_link_status(f"LinkId Sync: {actor.name} {to_link_id}")
+
     def send_actors_request(self):
         cc.deduplicate_scene_objects()
         self.send_request("ACTORS")
@@ -2515,9 +2529,9 @@ class DataLink(QObject):
         actor: LinkActor
         for actor in actors:
             if self.motion_prefix:
-                motion_name = actor.name + "_" + self.motion_prefix + "_motion"
+                motion_name = actor.name + "_" + self.motion_prefix + "_Motion"
             else:
-                motion_name = actor.name + "_motion"
+                motion_name = actor.name + "_Motion"
             self.update_link_status(f"Exporting Motion: {motion_name}", True)
             self.send_notify(f"Exporting Motion: {motion_name}")
             # Determine export path
