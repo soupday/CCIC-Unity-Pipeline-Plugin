@@ -46,6 +46,8 @@ Changelog
 
 ### 2.2.1
 - Spotlight error fix.
+- Send buttons disabled when waiting for remote response.
+- Relink will sync selected characters Link ID back to CC/iC.
 
 ### 2.2.0
 - Shader name fix.

@@ -23,12 +23,12 @@ class Options():
     MATCH_CLIENT_RATE: bool = True
     DATALINK_FRAME_SYNC: bool = False
     CC_DELETE_HIDDEN_FACES: bool = True
-    CC_BAKE_TEXTURES: bool = True
+    CC_BAKE_TEXTURES: bool = False
     CC_EXPORT_MODE: str = "Animation"
     CC_EXPORT_MAX_SUB_LEVEL: int = -1
     CC_EXPORT_FPS: float = 0.0
     IC_DELETE_HIDDEN_FACES: bool = True
-    IC_BAKE_TEXTURES: bool = True
+    IC_BAKE_TEXTURES: bool = False
     IC_EXPORT_MODE: str = "Animation"
     IC_EXPORT_MAX_SUB_LEVEL: int = -1
     IC_EXPORT_FPS: float = 0.0
