@@ -726,10 +726,8 @@ class Exporter:
         utils.log(f"Exporting {cc.get_object_type(obj)} - {obj.GetName()} - FBX: {file_path} ({export_fps.ToFloat()} fps)")
 
         options1 = (EExportFbxOptions__None | EExportFbxOptions_AutoSkinRigidMesh
-                                           #| EExportFbxOptions_RemoveAllUnused
                                             | EExportFbxOptions_ExportPbrTextureAsImageInFormatDirectory
                                             | EExportFbxOptions_ExportRootMotion
-                                           #| EExportFbxOptions_RemoveUnusedMorph
                                             | EExportFbxOptions_ExportMetallicAlpha
                                             | EExportFbxOptions_MergeDiffuseOpacityMap)
 
@@ -741,7 +739,6 @@ class Exporter:
                                              | EExportFbxOptions2_ResetBoneScale
                                              | EExportFbxOptions2_YUp
                                              | EExportFbxOptions2_RenameDuplicateMaterialName
-                                            #| EExportFbxOptions2_ResetSelfillumination
                                              | EExportFbxOptions2_ExtraWordForUnityAndUnreal)
 
         options3 = (EExportFbxOptions3__None | EExportFbxOptions3_ExportJson
@@ -838,7 +835,6 @@ class Exporter:
         utils.log(f"Exporting Motion FBX: {file_path} ({export_fps.ToFloat()} fps)")
 
         options1 = (EExportFbxOptions__None | EExportFbxOptions_AutoSkinRigidMesh
-                                            | EExportFbxOptions_RemoveAllUnused
                                             | EExportFbxOptions_ExportRootMotion
                                             | EExportFbxOptions_RemoveUnusedMorph)
 
@@ -847,7 +843,6 @@ class Exporter:
 
         options2 = (EExportFbxOptions2__None | EExportFbxOptions2_UnityPreset
                                              | EExportFbxOptions2_ResetBoneScale
-                                            #| EExportFbxOptions2_ResetSelfillumination
                                              | EExportFbxOptions2_YUp
                                              | EExportFbxOptions2_ExtraWordForUnityAndUnreal)
 
