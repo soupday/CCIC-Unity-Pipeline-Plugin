@@ -1725,13 +1725,22 @@ def get_extended_skin_bones(obj, skin_bones: list=None, ignore_pivot=False):
     objects.extend(child_objects)
     skin_bones = []
     for obj in objects:
-        SC = obj.GetSkeletonComponent()
-        skin_bones = SC.GetSkinBones()
-        for bone in skin_bones:
-            if bone not in skin_bones:
-                skin_bones.append(bone)
+        SC = safe_get_skeleton_component(obj)
+        if SC:
+            skin_bones = SC.GetSkinBones()
+            for bone in skin_bones:
+                if bone not in skin_bones:
+                    skin_bones.append(bone)
     return skin_bones
 
+
+def safe_get_skeleton_component(obj: RIObject) -> RISkeletonComponent:
+    try:
+        if hasattr(obj, "GetSkeletonComponent"):
+            return obj.GetSkeletonComponent()
+        return None
+    except:
+        return None
 
 def get_extended_skin_bones_tree(avatar_or_prop: RIObject):
 
@@ -1742,33 +1751,34 @@ def get_extended_skin_bones_tree(avatar_or_prop: RIObject):
     bone_defs = {}
     defs = []
     for obj in objects:
-        SC = obj.GetSkeletonComponent()
-        root = SC.GetRootBone()
-        skin_bones = SC.GetSkinBones()
-        if skin_bones:
-            num_bones = 0
-            for bone in skin_bones:
-                if bone.GetName():
-                    num_bones += 1
-            bone: RINode
-            if num_bones > 0:
-                link_id = get_link_id(obj, add_if_missing=True)
-            for bone in skin_bones:
-                if bone.GetID() not in bone_defs:
-                    bone_name = bone.GetName()
-                    if bone_name:
-                        bone_def = {
-                            "bone": bone,
-                            "id": bone.GetID(),
-                            "object": obj,
-                            "root": bone.GetID() == root.GetID(),
-                            "name": bone_name,
-                            "children": [],
-                            "parent": bone.GetParent(),
-                            "SC": SC,
-                        }
-                        bone_defs[bone.GetID()] = bone_def
-                        defs.append(bone_def)
+        SC = safe_get_skeleton_component(obj)
+        if SC:
+            root = SC.GetRootBone()
+            skin_bones = SC.GetSkinBones()
+            if skin_bones:
+                num_bones = 0
+                for bone in skin_bones:
+                    if bone.GetName():
+                        num_bones += 1
+                bone: RINode
+                if num_bones > 0:
+                    link_id = get_link_id(obj, add_if_missing=True)
+                for bone in skin_bones:
+                    if bone.GetID() not in bone_defs:
+                        bone_name = bone.GetName()
+                        if bone_name:
+                            bone_def = {
+                                "bone": bone,
+                                "id": bone.GetID(),
+                                "object": obj,
+                                "root": bone.GetID() == root.GetID(),
+                                "name": bone_name,
+                                "children": [],
+                                "parent": bone.GetParent(),
+                                "SC": SC,
+                            }
+                            bone_defs[bone.GetID()] = bone_def
+                            defs.append(bone_def)
 
     orphaned = []
     for bone_def in defs:
@@ -1886,37 +1896,38 @@ def get_extended_skin_bones_tree_debug(prop: RIObject):
         utils.log_always(f"loc: {[t.x, t.y, t.z]}")
         utils.log_always(f"rot: {[r.x, r.y, r.z, r.w]}")
         utils.log_always(f"sca: {[s.x, s.y, s.z]}")
-        SC = obj.GetSkeletonComponent()
-        root = SC.GetRootBone()
-        skin_bones = SC.GetSkinBones()
-        if skin_bones:
-            num_bones = 0
-            for bone in skin_bones:
-                if bone.GetName():
-                    num_bones += 1
-            bone: RINode
-            if num_bones > 0:
-                link_id = get_link_id(obj, add_if_missing=True)
-            for bone in skin_bones:
-                if bone.GetID() not in bone_defs:
-                    bone_name = bone.GetName()
-                    T: RTransform = bone.WorldTransform()
-                    t: RVector3 = T.T()
-                    r: RQuaternion = T.R()
-                    s: RVector3 = T.S()
-                    if bone_name:
-                        bone_def = {
-                            "bone": bone,
-                            "object": obj.GetName(),
-                            "root": bone.GetID() == root.GetID(),
-                            "name": bone_name,
-                            "loc": [t.x, t.y, t.z],
-                            "rot": [r.x, r.y, r.z, r.w],
-                            "sca": [s.x, s.y, s.z],
-                            "children": [],
-                        }
-                        bone_defs[bone.GetID()] = bone_def
-                        defs.append(bone_def)
+        SC = safe_get_skeleton_component(obj)
+        if SC:
+            root = SC.GetRootBone()
+            skin_bones = SC.GetSkinBones()
+            if skin_bones:
+                num_bones = 0
+                for bone in skin_bones:
+                    if bone.GetName():
+                        num_bones += 1
+                bone: RINode
+                if num_bones > 0:
+                    link_id = get_link_id(obj, add_if_missing=True)
+                for bone in skin_bones:
+                    if bone.GetID() not in bone_defs:
+                        bone_name = bone.GetName()
+                        T: RTransform = bone.WorldTransform()
+                        t: RVector3 = T.T()
+                        r: RQuaternion = T.R()
+                        s: RVector3 = T.S()
+                        if bone_name:
+                            bone_def = {
+                                "bone": bone,
+                                "object": obj.GetName(),
+                                "root": bone.GetID() == root.GetID(),
+                                "name": bone_name,
+                                "loc": [t.x, t.y, t.z],
+                                "rot": [r.x, r.y, r.z, r.w],
+                                "sca": [s.x, s.y, s.z],
+                                "children": [],
+                            }
+                            bone_defs[bone.GetID()] = bone_def
+                            defs.append(bone_def)
     for bone_def in defs:
         bone = bone_def["bone"]
         bone_name = bone_def["name"]
