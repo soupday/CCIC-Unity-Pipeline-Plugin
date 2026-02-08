@@ -2942,7 +2942,8 @@ class DataLink(QObject):
 
     def send_frame_sync(self):
         self.update_link_status(f"Sending Frame Sync")
-        link_fps = self.get_link_fps()
+        # Unity Timeline frame is based on 60fps
+        link_fps = RFps.Fps60 #self.get_link_fps()
         start_time = RGlobal.GetStartTime()
         end_time = RGlobal.GetEndTime()
         current_time = RGlobal.GetTime()
