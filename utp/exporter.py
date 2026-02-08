@@ -963,22 +963,23 @@ class Exporter:
             root_json["Root Bones"] = cc.extract_root_bones_from_tree(root_def)
             for obj in objects:
                 obj_name = obj.GetName()
-                SC: RISkeletonComponent = obj.GetSkeletonComponent()
-                root_bone = SC.GetRootBone()
-                root_name = root_bone.GetName() if root_bone else ""
-                skin_bones = SC.GetSkinBones()
-                skin_bone_names = [ b.GetName() for b in skin_bones if b.GetName() ] if skin_bones else []
-                obj_type = cc.get_object_type(obj)
-                if obj_type != "NONE" and skin_bone_names:
-                    id = cc.get_link_id(obj, add_if_missing=True)
-                    info_obj_json = {
-                        "Link_ID": id,
-                        "Name": obj_name,
-                        "Type": obj_type,
-                        "Root": root_name,
-                        "Bones": skin_bone_names,
-                    }
-                    info_json.append(info_obj_json)
+                SC = cc.safe_get_skeleton_component(obj)
+                if SC:
+                    root_bone = SC.GetRootBone()
+                    root_name = root_bone.GetName() if root_bone else ""
+                    skin_bones = SC.GetSkinBones()
+                    skin_bone_names = [ b.GetName() for b in skin_bones if b.GetName() ] if skin_bones else []
+                    obj_type = cc.get_object_type(obj)
+                    if obj_type != "NONE" and skin_bone_names:
+                        id = cc.get_link_id(obj, add_if_missing=True)
+                        info_obj_json = {
+                            "Link_ID": id,
+                            "Name": obj_name,
+                            "Type": obj_type,
+                            "Root": root_name,
+                            "Bones": skin_bone_names,
+                        }
+                        info_json.append(info_obj_json)
             root_json["Object_Info"] = info_json
 
         # Update JSON data

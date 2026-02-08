@@ -211,8 +211,7 @@ class LinkActor():
 
     def get_skeleton_component(self) -> RISkeletonComponent:
         if self.object:
-            if cc.is_avatar(self.object) or cc.is_prop(self.object):
-                return self.object.GetSkeletonComponent()
+            return cc.safe_get_skeleton_component(self.object)
         return None
 
     def get_face_component(self) -> RIFaceComponent:
@@ -573,37 +572,41 @@ def set_project_range(end_time: RTime):
 
 def get_clip_at_or_before(avatar: RIAvatar, time: RTime):
     fps = get_local_fps()
-    SC: RISkeletonComponent = avatar.GetSkeletonComponent()
-    num_clips = SC.GetClipCount()
     found_clip: RIClip = None
-    nearest_end_time: RTime = None
-    for i in range(0, num_clips):
-        clip:RIClip = SC.GetClip(i)
-        clip_start = clip.ClipTimeToSceneTime(fps.IndexedFrameTime(0))
-        length = clip.GetClipLength()
-        clip_end = clip.ClipTimeToSceneTime(length)
-        if time >= clip_start and time <= clip_end:
-            found_clip = clip
-            return found_clip
-        elif time > clip_end:
-            if not found_clip or clip_end > nearest_end_time:
+    SC = cc.safe_get_skeleton_component(avatar)
+    if SC:
+        num_clips = SC.GetClipCount()
+        nearest_end_time: RTime = None
+        for i in range(0, num_clips):
+            clip:RIClip = SC.GetClip(i)
+            clip_start = clip.ClipTimeToSceneTime(fps.IndexedFrameTime(0))
+            length = clip.GetClipLength()
+            clip_end = clip.ClipTimeToSceneTime(length)
+            if time >= clip_start and time <= clip_end:
                 found_clip = clip
-                nearest_end_time = clip_end
+                return found_clip
+            elif time > clip_end:
+                if not found_clip or clip_end > nearest_end_time:
+                    found_clip = clip
+                    nearest_end_time = clip_end
     return found_clip
 
 
 def make_avatar_clip(avatar, start_time, num_frames):
     fps = get_local_fps()
-    SC: RISkeletonComponent = avatar.GetSkeletonComponent()
-    clip: RIClip = SC.AddClip(start_time)
-    length = fps.IndexedFrameTime(num_frames)
-    clip.SetLength(length)
+    SC = cc.safe_get_skeleton_component(avatar)
+    clip: RIClip = None
+    if SC:
+        clip = SC.AddClip(start_time)
+        length = fps.IndexedFrameTime(num_frames)
+        clip.SetLength(length)
     return clip
 
 
 def finalize_avatar_clip(avatar, clip):
-    SC: RISkeletonComponent = avatar.GetSkeletonComponent()
-    SC.BakeFkToIk(RTime.FromValue(0), True)
+    SC = cc.safe_get_skeleton_component(avatar)
+    if SC:
+        SC.BakeFkToIk(RTime.FromValue(0), True)
 
 
 def decompose_transform(T: RTransform):
@@ -634,36 +637,38 @@ def apply_pose(actor: LinkActor, time: RTime, pose_data, shape_data, t_pose_data
 
 
 def get_pose_local(avatar: RIAvatar):
-    SC: RISkeletonComponent = avatar.GetSkeletonComponent()
-    skin_bones = SC.GetSkinBones()
+    SC = cc.safe_get_skeleton_component(avatar)
     pose = {}
-    for bone in skin_bones:
-        T: RTransform = bone.LocalTransform()
-        t: RVector3 = T.T()
-        r: RQuaternion = T.R()
-        s: RVector3 = T.S()
-        pose[bone.GetName()] = [
-            t.x, t.y, t.z,
-            r.x, r.y, r.z, r.w,
-            s.x, s.y, s.z,
-        ]
+    if SC:
+        skin_bones = SC.GetSkinBones()
+        for bone in skin_bones:
+            T: RTransform = bone.LocalTransform()
+            t: RVector3 = T.T()
+            r: RQuaternion = T.R()
+            s: RVector3 = T.S()
+            pose[bone.GetName()] = [
+                t.x, t.y, t.z,
+                r.x, r.y, r.z, r.w,
+                s.x, s.y, s.z,
+            ]
     return pose
 
 
 def get_pose_world(avatar: RIAvatar):
-    SC: RISkeletonComponent = avatar.GetSkeletonComponent()
-    skin_bones = SC.GetSkinBones()
+    SC = cc.safe_get_skeleton_component(avatar)
     pose = {}
-    for bone in skin_bones:
-        T: RTransform = bone.WorldTransform()
-        t: RVector3 = T.T()
-        r: RQuaternion = T.R()
-        s: RVector3 = T.S()
-        pose[bone.GetName()] = [
-            t.x, t.y, t.z,
-            r.x, r.y, r.z, r.w,
-            s.x, s.y, s.z,
-        ]
+    if SC:
+        skin_bones = SC.GetSkinBones()
+        for bone in skin_bones:
+            T: RTransform = bone.WorldTransform()
+            t: RVector3 = T.T()
+            r: RQuaternion = T.R()
+            s: RVector3 = T.S()
+            pose[bone.GetName()] = [
+                t.x, t.y, t.z,
+                r.x, r.y, r.z, r.w,
+                s.x, s.y, s.z,
+            ]
     return pose
 
 
@@ -2937,7 +2942,8 @@ class DataLink(QObject):
 
     def send_frame_sync(self):
         self.update_link_status(f"Sending Frame Sync")
-        link_fps = self.get_link_fps()
+        # Unity Timeline frame is based on 60fps
+        link_fps = RFps.Fps60 #self.get_link_fps()
         start_time = RGlobal.GetStartTime()
         end_time = RGlobal.GetEndTime()
         current_time = RGlobal.GetTime()

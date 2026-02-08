@@ -44,6 +44,10 @@ Links
 Changelog
 =========
 
+### 2.2.3
+- Fix to iClone 8.7 accessory Skeleton Component bug.
+- Fix to Sync view frame calculation at fps other than 60.
+
 ### 2.2.2
 - Send buttons disabled when waiting for remote response.
 - Relink will sync selected characters Link ID back to CC/iC.
