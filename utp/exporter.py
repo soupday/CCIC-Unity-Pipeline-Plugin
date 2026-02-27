@@ -727,13 +727,14 @@ class Exporter:
 
         options1 = (EExportFbxOptions__None | EExportFbxOptions_AutoSkinRigidMesh
                                             | EExportFbxOptions_ExportPbrTextureAsImageInFormatDirectory
-                                            | EExportFbxOptions_ExportRootMotion
                                             | EExportFbxOptions_ExportMetallicAlpha
                                             | EExportFbxOptions_MergeDiffuseOpacityMap)
 
         if self.avatar:
             if self.option_remove_hidden:
                 options1 = options1 | EExportFbxOptions_RemoveHiddenMesh
+            if cc.is_avatar_hik(self.avatar):
+                options1 = options1 | EExportFbxOptions_ExportRootMotion
 
         options2 = (EExportFbxOptions2__None | EExportFbxOptions2_UnityPreset
                                              | EExportFbxOptions2_ResetBoneScale
@@ -835,11 +836,12 @@ class Exporter:
         utils.log(f"Exporting Motion FBX: {file_path} ({export_fps.ToFloat()} fps)")
 
         options1 = (EExportFbxOptions__None | EExportFbxOptions_AutoSkinRigidMesh
-                                            | EExportFbxOptions_ExportRootMotion
                                             | EExportFbxOptions_RemoveUnusedMorph)
 
         if self.avatar:
             options1 = options1 | EExportFbxOptions_RemoveAllMeshKeepMorph
+            if cc.is_avatar_hik(self.avatar):
+                options1 = options1 | EExportFbxOptions_ExportRootMotion
 
         options2 = (EExportFbxOptions2__None | EExportFbxOptions2_UnityPreset
                                              | EExportFbxOptions2_ResetBoneScale
@@ -902,6 +904,11 @@ class Exporter:
             json_data = cc.generate_base_json_data(self.json_path, self.character_id, generation)
 
         json_data = cc.CCJsonData(self.json_path, self.fbx_path, self.character_id)
+
+        if not json_data.valid:
+            utils.log_error("No valid json data could be found for the export ...")
+            return
+
         root_json = json_data.get_root_json()
 
         if self.light:

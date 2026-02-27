@@ -3166,36 +3166,60 @@ class DataLink(QObject):
             RScene.SelectObjects(self.data.stored_selection)
         self.update_link_status(f"Sequence Sent: {num_frames} frames")
 
-    def prep_pose_actor(self, actor: LinkActor, start_time, num_frames, start_frame, end_frame):
+    def prep_pose_actor(self, actor: LinkActor, start_time, end_time):
         """Creates an empty clip and grabs the t-pose data for the character"""
 
         fps = get_local_fps()
-        RGlobal.RemoveAllAnimations(actor.object)
+        start_frame = fps.GetFrameIndex(start_time)
+        end_frame = fps.GetFrameIndex(end_time)
 
         clip: RIClip
         t0 = RTime.FromValue(0)
         length = fps.IndexedFrameTime(end_frame)
 
-        SC = actor.get_skeleton_component()
-        clip = SC.AddClip(t0)
-        clip.SetLength(length)
+        if actor.get_type() == "PROP" or actor.get_type() == "AVATAR":
 
-        FC = actor.get_face_component()
-        FC.AddClip(t0, "Expressions", length)
-        FC.AddExpressivenessKey(t0, 1.0)
-        clip = FC.GetClip(0)
-        clip.SetLength(length)
+            # fetch the extended skin bone tree
+            actor.skin_tree = cc.get_extended_skin_bones_tree(actor.object)
+            actor.skin_bones, actor.id_tree = cc.extract_extended_skin_bones(actor.skin_tree)
+            actor.skin_objects = cc.extract_extended_skin_objects(actor.skin_tree)
 
-        VC = actor.get_viseme_component()
-        VC.AddVisemesClip(t0, "Visemes", length)
-        clip = VC.GetClip(0)
-        clip.SetLength(length)
+            for obj_id, skin_def in actor.skin_objects.items():
+                obj = skin_def["object"]
+                SC: RISkeletonComponent = skin_def["SC"]
+                RGlobal.RemoveAllAnimations(obj)
+                clip: RIClip = SC.AddClip(t0)
+                if clip:
+                    clip.SetLength(length)
+                    skin_def["clip"] = clip
+                    RGlobal.ObjectModified(obj, EObjectModifiedType_Motion | EObjectModifiedType_Attribute)
+                else:
+                    skin_def["clip"] = None
+                    log_error(f"Unable to create animation clip: {obj.GetName()} ({obj_id})")
 
-        set_transform_control(t0, actor.object, RVector3(0,0,0), RQuaternion(RVector4(0,0,0,1)), RVector3(1,1,1))
-        RGlobal.ObjectModified(actor.object, EObjectModifiedType_Transform)
-        actor.object.Update()
-        t_pose = get_pose_local(actor.object) if actor.is_avatar() else None
-        actor.set_t_pose(t_pose)
+        if actor.get_type() == "AVATAR":
+
+            FC = actor.get_face_component()
+            FC.AddClip(t0, "Expressions", length)
+            FC.AddExpressivenessKey(t0, 1.0)
+            clip = FC.GetClip(0)
+            clip.SetLength(length)
+
+            VC = actor.get_viseme_component()
+            VC.AddVisemesClip(t0, "Visemes", length)
+            clip = VC.GetClip(0)
+            clip.SetLength(length)
+
+        if actor.get_type() == "PROP" or actor.get_type() == "AVATAR":
+
+            for obj_id, obj_def in actor.skin_objects.items():
+                obj = obj_def["object"]
+                set_transform_control(t0, obj, RVector3(0,0,0), RQuaternion(RVector4(0,0,0,1)), RVector3(1,1,1))
+                RGlobal.ObjectModified(obj, EObjectModifiedType_Transform)
+                obj.Update()
+
+            t_pose = get_pose_local(actor)
+            actor.set_t_pose(t_pose)
 
     def decode_pose_frame_data(self, pose_data):
         count, frame = struct.unpack_from("!II", pose_data)
