@@ -740,6 +740,7 @@ class Exporter:
                                              | EExportFbxOptions2_ResetBoneScale
                                              | EExportFbxOptions2_YUp
                                              | EExportFbxOptions2_RenameDuplicateMaterialName
+                                             | EExportFbxOptions2_RenameDuplicateBoneName
                                              | EExportFbxOptions2_ExtraWordForUnityAndUnreal)
 
         options3 = (EExportFbxOptions3__None | EExportFbxOptions3_ExportJson
@@ -846,6 +847,7 @@ class Exporter:
         options2 = (EExportFbxOptions2__None | EExportFbxOptions2_UnityPreset
                                              | EExportFbxOptions2_ResetBoneScale
                                              | EExportFbxOptions2_YUp
+                                             | EExportFbxOptions2_RenameDuplicateBoneName
                                              | EExportFbxOptions2_ExtraWordForUnityAndUnreal)
 
         options3 = (EExportFbxOptions3__None)
