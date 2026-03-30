@@ -44,6 +44,10 @@ Links
 Changelog
 =========
 
+### 2.2.5
+- Fix to exporting HIK non-humanoids.
+- Rename's duplicate bones on export to fix avatar setup problems with some accessories.
+
 ### 2.2.3
 - Fix to iClone 8.7 accessory Skeleton Component bug.
 - Fix to Sync view frame calculation at fps other than 60.
