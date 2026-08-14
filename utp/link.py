@@ -1698,6 +1698,7 @@ class DataLink(QObject):
     def on_show_hide(self, visible):
         if visible:
             qt.toggle_toolbar_action("Unity Pipeline Toolbar", "Unity DataLink", True)
+            self.update_ui()
         else:
             qt.toggle_toolbar_action("Unity Pipeline Toolbar", "Unity DataLink", False)
         self.register_callbacks(visible)
