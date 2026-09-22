@@ -44,6 +44,9 @@ Links
 Changelog
 =========
 
+### 2.2.7
+- Updates panel UI correctly when returning to focus.
+
 ### 2.2.5
 - Fix to exporting HIK non-humanoids.
 - Rename's duplicate bones on export to fix avatar setup problems with some accessories.
