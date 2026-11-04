@@ -115,6 +115,8 @@ class Preferences(QObject):
                                row=7, col=0, col_span=2, update=self.write_options)
             qt.DCheckBox(self, grid, "Bake Textures", OPTS, "CC_BAKE_TEXTURES",
                                row=8, col=0, col_span=2, update=self.write_options)
+            qt.DCheckBox(self, grid, "Unity Textures", OPTS, "CC_EXPORT_UNITY_TEXTURES",
+                               row=9, col=0, col_span=2, update=self.write_options)
 
         else:
 
@@ -138,6 +140,8 @@ class Preferences(QObject):
                                row=4, col=0, col_span=2, update=self.write_options)
             qt.DCheckBox(self, grid, "Bake Textures", OPTS, "IC_BAKE_TEXTURES",
                                row=5, col=0, col_span=2, update=self.write_options)
+            qt.DCheckBox(self, grid, "Unity Textures", OPTS, "IC_EXPORT_UNITY_TEXTURES",
+                               row=6, col=0, col_span=2, update=self.write_options)
 
         qt.spacing(layout, 10)
         qt.stretch(layout, 1)
