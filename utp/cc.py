@@ -1,25 +1,68 @@
 # Copyright (C) 2025 Victor Soupday
 # This file is part of CC/iC-Unity-Pipeline-Plugin <https://github.com/soupday/CCiC-Unity-Pipeline-Plugin>
 #
-# CC/iC-Unity-Pipeline-Plugin is free software: you can redistribute it and/or modify
+# This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# CC/iC-Unity-Pipeline-Plugin is distributed in the hope that it will be useful,
+# This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with CC/iC-Unity-Pipeline-Plugin.  If not, see <https://www.gnu.org/licenses/>.
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from RLPy import *
 del abs
 import os, json, math
+from typing import List
 from . import vars, utils
 from . error import ErrorCode, error_report, error_reset, error_show
 from enum import IntEnum
+
+PROJECT_FILE_NAME = None
+CALLBACK = None
+CALLBACK_ID = None
+
+
+class BTPEventCallback(REventCallback):
+
+    def __init__(self):
+       REventCallback.__init__(self)
+
+    def OnObjectDataChanged(self):
+        return super().OnObjectDataChanged()
+
+    def OnAfterFileLoadedWithPath(self, nFileType, strFilePath):
+        global PROJECT_FILE_NAME
+        if nFileType == ESaveFileType_Project:
+            dir, file = os.path.split(strFilePath)
+            name, ext = os.path.splitext(file)
+            PROJECT_FILE_NAME = name
+        return super().OnAfterFileLoadedWithPath(nFileType, strFilePath)
+
+
+def register(state=None):
+    global PROJECT_FILE_NAME, CALLBACK, CALLBACK_ID
+    if state:
+        PROJECT_FILE_NAME = state["PROJECT_FILE_NAME"]
+    if not CALLBACK:
+        CALLBACK = BTPEventCallback()
+        CALLBACK_ID = REventHandler.RegisterCallback(CALLBACK)
+
+
+def unregister():
+    global CALLBACK, CALLBACK_ID
+    state = {
+        "PROJECT_FILE_NAME": PROJECT_FILE_NAME
+    }
+    if CALLBACK and CALLBACK_ID:
+        REventHandler.UnregisterCallback(CALLBACK_ID)
+        CALLBACK = None
+        CALLBACK_ID = None
+    return state
 
 
 SHADER_MAPS = { # { "Json_shader_name" : "CC3_shader_name", }
@@ -71,15 +114,15 @@ TEXTURE_MAPS = { # { "json_channel_name": [RL_Texture_Channel, is_Substance_Pain
     "Specular": [EMaterialTextureChannel_Specular, True, "specular"],
     "Roughness": [EMaterialTextureChannel_Shininess, True, "roughness"],
     "Glow": [EMaterialTextureChannel_Glow, True, "glow"],
-    "Displacement": [EMaterialTextureChannel_Displacement, True, "displacement"],
+    "Displacement": [EMaterialTextureChannel_Displacement, False, "displacement"],
     "Opacity": [EMaterialTextureChannel_Opacity, True, "opacity"],
     "Blend": [EMaterialTextureChannel_DiffuseBlend, False, ""],
     "Reflection": [EMaterialTextureChannel_Reflection, False, ""],
     "Refraction": [EMaterialTextureChannel_Refraction, False, ""],
     "Cube": [EMaterialTextureChannel_Cube, False, ""],
     "AO": [EMaterialTextureChannel_AmbientOcclusion, True, "ao"],
-    "Bump": [EMaterialTextureChannel_Bump, True, "bump"],
-    "Normal": [EMaterialTextureChannel_Normal, True, "normal"],
+    "Bump": [EMaterialTextureChannel_Bump, False, "bump"],
+    "Normal": [EMaterialTextureChannel_Normal, False, "normal"],
 }
 
 
@@ -655,53 +698,75 @@ class CCJsonData():
 
 
 class CCMeshMaterial():
-    actor = None
-    actor_name: str = None
-    obj = None
-    obj_name: str = None
-    mesh_name: str = None
-    mat_name: str = None
-    duf_material: dict = None
-    duf_mesh: dict = None
-    mat_component: RIMaterialComponent = None
-    data: dict = None
-    substance_index = 1001
-    json_data: CCJsonData = None
-    json_mesh_name: str = None
-    json_mat_name: str = None
-    mesh_json: CCMeshJson = None
-    mat_json: CCMaterialJson = None
-    physx_mesh_json: CCPhysicsMeshJson = None
-    physx_mat_json: CCPhysicsMaterialJson = None
-    physx_object = None
-    physx_component: RIPhysicsComponent = None
 
     def __init__(self, actor = None, obj = None,
                  mesh_name = None, mat_name = None,
                  duf_mesh = None, duf_material = None,
                  physx_object = None, cc_json_data = None,
-                 exact=False):
+                 exact=False, duf=None):
         self.actor = actor
-        self.obj = obj
-        self.actor_name = actor.GetName()
-        self.obj_name = obj.GetName()
+        self.duf = duf
+        self.actor_name: str = None
+        self.obj_name: str = None
+        self.mat_component: RIMaterialComponent = None
+        self.data: dict = None
+        self.substance_index = 1001
+        self.json_mesh_name: str = None
+        self.json_mat_name: str = None
+        self.mesh_json: CCMeshJson = None
+        self.mat_json: CCMaterialJson = None
+        self.physx_mesh_json: CCPhysicsMeshJson = None
+        self.physx_mat_json: CCPhysicsMaterialJson = None
+        self.physx_object = physx_object
+        self.physx_component: RIPhysicsComponent = None
         self.mesh_name = mesh_name
         self.mat_name = mat_name
-        self.actor = actor
-        self.physx_object = physx_object
+        self.mesh = self.get_mesh()
+        self.material = self.get_material()
         self.duf_mesh = duf_mesh
         self.duf_material = duf_material
+        if obj:
+            self.obj = obj
+            self.obj_name = obj.GetName()
+        if actor:
+            self.actor = actor
+            self.actor_name = actor.GetName()
+        if duf_material:
+            self.duf_mesh = duf_material.mesh
         self.json_data = cc_json_data
         if self.json_data:
             self.find_json_data(exact)
 
+    def __str__(self):
+        mesh = self.get_mesh()
+        mat = self.get_material()
+        return f"Mesh: {mesh.GetName()} ({mesh.GetID()}), Material: {mat.GetName()} ({mat.GetID()})"
+
+
+    def id(self):
+        mesh_id: int = self.mesh_id()
+        material_id: int = self.material_id()
+        return f"{mesh_id}-{material_id}"
+
+    def mesh_id(self):
+        try:
+            return self.mesh.GetID()
+        except:
+            return None
+
+    def material_id(self):
+        try:
+            return self.material.GetID()
+        except:
+            return None
+
     def material_component(self):
-        if not self.mat_component and self.actor:
+        if not self.mat_component and self.actor and hasattr(self.actor, "GetMaterialComponent"):
             self.mat_component = self.actor.GetMaterialComponent()
         return self.mat_component
 
     def physics_component(self):
-        if not self.physx_component and self.physx_object:
+        if not self.physx_component and self.physx_object and hasattr(self.actor, "GetPhysicsComponent"):
             self.physx_component = self.physx_object.GetPhysicsComponent()
         return self.physx_component
 
@@ -711,61 +776,111 @@ class CCMeshMaterial():
     def has_physics_json(self):
         return self.json_data and self.physx_mesh_json and self.physx_mat_json
 
-    def set_duf_mesh_material(self, duf_mesh, duf_material):
+    def has_cc_mesh(self):
+        return self.mesh_name is not None
+
+    def has_cc_mat(self):
+        return self.mat_name is not None
+
+    def is_prop(self):
+        return self.actor and is_prop(self.actor)
+
+    def is_avatar(self):
+        return self.actor and is_avatar(self.actor)
+
+    def set_duf_mesh_material(self, duf, duf_mesh, duf_material):
         self.duf_mesh = duf_mesh
         self.duf_material = duf_material
 
     def change_material_name(self, name):
         MC = self.material_component()
         MC.SetMaterialName(self.mesh_name, self.mat_name, name)
+        self.update_modified()
 
     def set_diffuse(self, rgb):
         material_component = self.material_component()
         if material_component:
-            c = rgb_color(rgb)
-            material_component.AddDiffuseKey(key_zero(), self.mesh_name, self.mat_name, c)
+            try:
+                c = rgb_color(rgb)
+                material_component.AddDiffuseKey(key_zero(), self.mesh_name, self.mat_name, c)
+                self.update_modified()
+            except Exception as e:
+                utils.log_error(f"Unable to set diffuse color value ({rgb})", e)
 
     def set_ambient(self, rgb):
         material_component = self.material_component()
         if material_component:
-            c = rgb_color(rgb)
-            material_component.AddAmbientKey(key_zero(), self.mesh_name, self.mat_name, c)
+            try:
+                c = rgb_color(rgb)
+                material_component.AddAmbientKey(key_zero(), self.mesh_name, self.mat_name, c)
+                self.update_modified()
+            except Exception as e:
+                utils.log_error(f"Unable to set ambient color value ({rgb})", e)
 
-    def set_specular(self, rgb):
+    def set_specular(self, specular):
         material_component = self.material_component()
         if material_component:
-            c = rgb_color(rgb)
-            material_component.AddSpecularKey(key_zero(), self.mesh_name, self.mat_name, c)
+            try:
+                if type(specular) is list or type(specular) is tuple:
+                    specular = rgb_color(specular)
+                else:
+                    specular = float(specular)
+                material_component.AddSpecularKey(key_zero(), self.mesh_name, self.mat_name, specular)
+                self.update_modified()
+            except Exception as e:
+                utils.log_error(f"Unable to set specular value ({specular})", e)
 
     def set_opacity(self, opacity):
         material_component = self.material_component()
         if material_component:
             material_component.AddOpacityKey(key_zero(), self.mesh_name, self.mat_name, opacity*100)
+            self.update_modified()
 
     def set_glossiness(self, glossiness):
         material_component = self.material_component()
         if material_component:
             material_component.AddGlossinessKey(key_zero(), self.mesh_name, self.mat_name, glossiness*100)
+            self.update_modified()
+
+    def set_reflection(self, reflection):
+        material_component = self.material_component()
+        if material_component:
+            if reflection > 0.001:
+                material_component.SetReflectionEnable(self.mesh_name, self.mat_name, True)
+            else:
+                material_component.SetReflectionEnable(self.mesh_name, self.mat_name, False)
+            material_component.AddReflectionKey(key_zero(), self.mesh_name, self.mat_name, reflection*100)
+            self.update_modified()
+
+    def set_refraction(self, refraction):
+        material_component = self.material_component()
+        if material_component:
+            material_component.AddRefractionKey(key_zero(), self.mesh_name, self.mat_name, refraction*100)
+            self.update_modified()
 
     def set_self_illumination(self, glow):
         material_component = self.material_component()
         if material_component:
             material_component.AddSelfIlluminationKey(key_zero(), self.mesh_name, self.mat_name, glow*100)
+            self.update_modified()
 
     def remove_channel_image(self, channel):
         material_component = self.material_component()
         if material_component:
             material_component.RemoveMaterialTexture(self.mesh_name, self.mat_name, channel)
+            self.update_modified()
 
     def set_attribute(self, attrib, value):
         material_component = self.material_component()
         if material_component:
             material_component.SetAttributeValue(self.mesh_name, self.mat_name, attrib, value)
+            self.update_modified()
 
     def load_material(self, material_path):
         material_component = self.material_component()
         if material_component:
             material_component.LoadMaterial(self.mesh_name, self.mat_name, material_path)
+            self.update_modified()
 
     def get_shader(self):
         material_component = self.material_component()
@@ -789,30 +904,62 @@ class CCMeshMaterial():
         material_component = self.material_component()
         if material_component:
             material_component.LoadImageToTexture(self.mesh_name, self.mat_name, channel, file)
+            self.update_modified()
+
+    def load_channel_qimage(self, channel, file):
+        material_component = self.material_component()
+        if material_component:
+            image = RImage.CreateImage()
+            image.LoadFile(file)
+            if image:
+                material_component.SetImage(image, self.mesh_name, self.mat_name, channel)
+                self.update_modified()
 
     def load_shader_texture(self, shader_texture, file):
         material_component = self.material_component()
         if material_component:
             material_component.LoadShaderTexture(self.mesh_name, self.mat_name, shader_texture, file)
+            self.update_modified()
 
     def channel_has_image(self, channel):
         material_component = self.material_component()
         if material_component:
-            res = material_component.GetImageColor(self.mesh_name, self.mat_name, channel)
-            if len(res) == 7:
-                return True
+            has_image = material_component.HasImage(self.mesh_name, self.mat_name, channel)
+            get_image = material_component.GetImage(self.mesh_name, self.mat_name, channel)
+            if has_image or get_image is not None:
+                # doesn't work on normal or roughness channel's
+                #image = material_component.GetImage(self.mesh_name, self.mat_name, channel)
+                #return image is not None
+
+                # doesn't work on normal or roughness channel's
+                #res = material_component.HasImage(self.mesh_name, self.mat_name, channel)
+                #print(res)
+                #return res
+
+                # can't distinguish between normal and bump
+                res = material_component.GetImageColor(self.mesh_name, self.mat_name, channel)
+                if len(res) == 7:
+                    return True
+
         return False
 
     def set_uv_mapping(self, channel, offset_vector, tiling_vector, rotation):
         material_component = self.material_component()
         if material_component:
             material_component.AddUvDataKey(key_zero(), self.mesh_name, self.mat_name, channel, offset_vector, tiling_vector, rotation)
+            self.update_modified()
 
     def set_channel_texture_weight(self, channel, weight):
         material_component = self.material_component()
         if material_component:
-            if self.channel_has_image(channel):
+            try:
+            #if self.channel_has_image(channel):
                 material_component.AddTextureWeightKey(key_zero(), self.mesh_name, self.mat_name, channel, weight)
+                self.update_modified()
+            except: ...
+
+    def update_modified(self):
+        RGlobal.ObjectModified(self.actor, EObjectModifiedType_Attribute | EObjectModifiedType_Material)
 
     def set_channel_image_color(self, channel, softness, H,S,B,C,c,y,m):
         material_component = self.material_component()
@@ -833,17 +980,42 @@ class CCMeshMaterial():
             if res != (H,S,B,C,c,y,m):
                 utils.log_info(f" - Changing channel HSBC: {(H,S,B,C,c,y,m)}")
                 material_component.SetImageColor(self.mesh_name, self.mat_name, channel, softness, hsbc, cym)
+                self.update_modified()
+
+    def get_mesh(self) -> RIMesh:
+        if self.actor:
+            meshes: List[RIMesh] = self.actor.GetMeshes()
+            for mesh in meshes:
+                if mesh.GetName() == self.mesh_name:
+                    return mesh
+        return None
+
+    def get_material(self, mesh=None) -> RIStdMaterial:
+        if not mesh:
+            mesh = self.get_mesh()
+        if mesh:
+            materials: List[RIStdMaterial] = mesh.GetStdMaterials()
+            for mat in materials:
+                if mat.GetName() == self.mat_name:
+                    return mat
+        return None
+
+    def set_channel_use_rgb(self, channel, use_rgb):
+        std_material = self.get_material()
+        if std_material:
+            std_material.SetUseSRGB(channel, use_rgb)
 
     def set_shader_parameter(self, parameter, value):
         """Expects scalars as float (0-1) and colors and RGB lists (0-255)"""
         material_component = self.material_component()
         if material_component:
             parameter_names = material_component.GetShaderParameterNames(self.mesh_name, self.mat_name)
-            #if parameter in parameter_names:
-            value = shader_value(value)
-            material_component.SetShaderParameter(self.mesh_name, self.mat_name, parameter, value)
-            #else:
-            #    utils.log_info(f"Parameter: {parameter} does not exist in shader!")
+            if parameter in parameter_names:
+                value = shader_value(value)
+                material_component.SetShaderParameter(self.mesh_name, self.mat_name, parameter, value)
+                self.update_modified()
+            else:
+                utils.log_info(f"Parameter: {parameter} does not exist in shader!")
 
     def get_shader_parameter(self, parameter):
         material_component = self.material_component()
@@ -875,8 +1047,11 @@ class CCMeshMaterial():
         content = find_content_in_folder(template_folder, channel)
         return content
 
-    def temp_image_path(self, channel_name, ext):
-        path = temp_files_path()
+    def temp_image_path(self, channel_name, ext, sub_folder=None):
+        folder = "Temp Images"
+        if sub_folder:
+            folder = os.path.join(folder, sub_folder)
+        path = temp_files_path(folder)
         image_name = self.mesh_material_channel_image_name(channel_name, ext)
         image_path = os.path.join(path, image_name)
         return image_path
@@ -895,6 +1070,21 @@ class CCMeshMaterial():
             if name in self.data:
                 return self.data[name]
         return default
+
+    def get_full_path(self, name):
+        if name.endswith("_full"):
+            full_name = name
+            rel_name = name[:-5]
+        else:
+            full_name = name + "_full"
+            rel_name = name
+        full_path = self.get_data(full_name)
+        rel_path = self.get_data(rel_name)
+        if full_path:
+            return full_path
+        if rel_path and self.duf:
+            return self.duf.get_full_library_path(rel_path)
+        return rel_path
 
     def increment_substance_index(self):
         index = self.substance_index
@@ -950,17 +1140,97 @@ class CCMeshMaterial():
             else:
                 utils.log_warn(f"Mesh JSON {self.obj_name}/{self.mesh_name} not found!")
 
+    BODY_SHADER_NAMES = [
+        "RLHead",
+        "RLSkin",
+    ]
 
+    EYE_SHADER_NAMES = [
+        "RLEye",
+    ]
 
+    TEETH_SHADER_NAMES = [
+        "RLTeethGum",
+    ]
 
+    BODY_MESH_NAMES = [
+        "CC_Base_Body",
+    ]
+
+    BODY_MATERIAL_NAMES = [
+        "Std_Skin_Head",
+        "Std_Skin_Body",
+        "Std_Skin_Arm",
+        "Std_Skin_Leg",
+        "Std_Nails",
+        "Std_Eyelash",
+    ]
+
+    EYE_MATERIAL_NAMES = [
+        "Std_Eye_R",
+        "Std_Eye_L",
+        "Std_Cornea_R",
+        "Std_Cornea_L",
+    ]
+
+    TEETH_MATERIAL_NAMES = [
+        "Std_Upper_Teeth",
+        "Std_Lower_Teeth",
+    ]
+
+    EYE_MESH_NAMES = [
+        "Custom_Eye",
+        "CC_Base_Eye",
+    ]
+
+    TEETH_MESH_NAMES = [
+        "Custom_Teeth",
+        "CC_Base_Upper_Teeth",
+        "CC_Base_Lower_Teeth",
+        "CC_Base_Tongue",
+    ]
+
+    def is_eye(self):
+        if self.mesh_name in self.EYE_MESH_NAMES:
+            return True
+        if self.mat_name in self.EYE_MATERIAL_NAMES:
+            return True
+        shader = self.get_shader()
+        if shader in self.EYE_SHADER_NAMES:
+            return True
+        return False
+
+    def is_teeth(self):
+        if self.mesh_name in self.TEETH_MESH_NAMES:
+            return True
+        if self.mat_name in self.TEETH_MATERIAL_NAMES:
+            return True
+        shader = self.get_shader()
+        if shader in self.TEETH_SHADER_NAMES:
+            return True
+        return False
+
+    def is_body(self):
+        if self.mesh_name in self.BODY_MESH_NAMES:
+            return True
+        if self.mat_name in self.BODY_MATERIAL_NAMES:
+            return True
+        shader = self.get_shader()
+        if shader in self.TEETH_SHADER_NAMES:
+            return True
+        return False
+
+    def is_hair(self):
+        return self.get_shader() == "RLHair" or self.get_data("is_hair", False)
 
 
 def get_selected_mesh_materials(exclude_mesh_names=None, exclude_material_names=None,
-                                mesh_filter=None, material_filter=None, json_data=None):
+                                mesh_filter=None, material_filter=None, json_data=None) -> List[CCMeshMaterial]:
 
     selected_objects = RScene.GetSelectedObjects()
 
     mesh_materials = []
+    done = []
 
     obj: RIObject
     for obj in selected_objects:
@@ -978,7 +1248,7 @@ def get_selected_mesh_materials(exclude_mesh_names=None, exclude_material_names=
                 if mesh_filter and mesh_filter(mesh_name):
                     continue
 
-                obj = find_actor_object(obj, mesh_name)
+                actor_obj = find_actor_object(obj, mesh_name)
 
                 material_names = material_component.GetMaterialNames(mesh_name)
                 for mat_name in material_names:
@@ -989,19 +1259,21 @@ def get_selected_mesh_materials(exclude_mesh_names=None, exclude_material_names=
                     if material_filter and material_filter(mesh_name):
                         continue
 
-                    physics_object = get_actor_physics_object(actor, mesh_name, mat_name)
+                    physics_object, physics_component = get_actor_physics_object(actor, mesh_name, mat_name)
 
-                    M = CCMeshMaterial(actor=actor, obj=obj, mesh_name=mesh_name, mat_name=mat_name,
-                                       physx_object=physics_object, cc_json_data=json_data)
-
-                    mesh_materials.append(M)
+                    done_id = (actor, obj, mesh_name, mat_name)
+                    if done_id not in done:
+                        M = CCMeshMaterial(actor=actor, obj=actor_obj, mesh_name=mesh_name, mat_name=mat_name,
+                                        physx_object=physics_object, cc_json_data=json_data)
+                        mesh_materials.append(M)
+                        done.append(done_id)
 
     return mesh_materials
 
 
 def get_avatar_mesh_materials(avatar, exclude_mesh_names=None, exclude_material_names=None,
                               mesh_filter=None, material_filter=None, json_data=None,
-                              exact=False):
+                              exact=False) -> List[CCMeshMaterial]:
 
     mesh_materials = []
     done = []
@@ -1093,7 +1365,26 @@ def is_iclone(version: float=None):
         return RApplication.GetProductName() == "iClone"
 
 
-def find_actor_source_meshes(imported_mesh_name, imported_obj_name, actor: RIAvatar):
+def has_child_obj(obj, search):
+    if obj == search:
+        return True
+    else:
+        children = obj.GetChildren()
+        for child in children:
+            if has_child_obj(child, search):
+                return True
+    return False
+
+
+def get_standard_eye(avatar: RIAvatar):
+    parts = avatar.GetAvatarParts()
+    for part in parts:
+        if part.GetName() == "CC_Base_Eye":
+            return part
+    return None
+
+
+def find_actor_source_meshes_2(imported_mesh_name, imported_obj_name, actor: RIAvatar):
     # Anything sent to Blender will have it's mesh name changed to it's object name
     # from Blender: imported_mesh_name will nearly always be the same as imported_obj_name (unless the user has changed them)
     # - which will match the CC object name, but not nescessarily the mesh name
@@ -1134,7 +1425,7 @@ def find_actor_source_meshes(imported_mesh_name, imported_obj_name, actor: RIAva
             for mesh in meshes:
                 if mesh.GetName() in try_names:
                     if mesh.GetID() not in done_ids:
-                        print(f"Matching object name: {obj.GetName()} mesh name: {mesh.GetName()} ({mesh.GetID()})")
+                        #print(f"Matching object name: {obj.GetName()} mesh name: {mesh.GetName()} ({mesh.GetID()})")
                         found.append(mesh)
                         done_ids.add(mesh.GetID())
 
@@ -1144,7 +1435,7 @@ def find_actor_source_meshes(imported_mesh_name, imported_obj_name, actor: RIAva
         for mesh in meshes:
             if mesh.GetName() in try_names:
                 if mesh.GetID() not in done_ids:
-                    print(f"Matching just mesh name: {mesh.GetName()} ({mesh.GetID()}) in {obj.GetName()}")
+                    #print(f"Matching just mesh name: {mesh.GetName()} ({mesh.GetID()}) in {obj.GetName()}")
                     found.append(mesh)
                     done_ids.add(mesh.GetID())
 
@@ -1159,7 +1450,7 @@ def find_actor_source_meshes(imported_mesh_name, imported_obj_name, actor: RIAva
             for try_name in try_names:
                 if try_name.startswith(mesh_name) or mesh_name.startswith(try_name):
                     if mesh.GetID() not in done_ids:
-                        print(f"Partial matching {try_name} on mesh name: {mesh.GetName()} ({mesh.GetID()}) in {obj.GetName()}")
+                        #print(f"Partial matching {try_name} on mesh name: {mesh.GetName()} ({mesh.GetID()}) in {obj.GetName()}")
                         found.append(mesh)
                         done_ids.add(mesh.GetID())
 
@@ -1170,9 +1461,89 @@ def find_actor_source_meshes(imported_mesh_name, imported_obj_name, actor: RIAva
         if obj_name in try_names:
             for mesh in meshes:
                 if mesh.GetID() not in done_ids:
-                    print(f"Adding all: {mesh.GetName()} ({mesh.GetID()}) from {obj.GetName()}")
+                    #print(f"Adding all: {mesh.GetName()} ({mesh.GetID()}) from {obj.GetName()}")
                     found.append(mesh)
                     done_ids.add(mesh.GetID())
+
+    return found
+
+
+def find_actor_source_meshes(imported_mesh_name, imported_obj_name, actor: RIAvatar):
+    objects = get_actor_objects(actor)
+    try_names = set()
+    try_names.add(imported_mesh_name)
+    try_names.add(safe_export_name(imported_mesh_name))
+
+    # accessories can cause mesh renames with _0 _1 _2 suffixes added
+    if imported_mesh_name[-1].isdigit() and imported_mesh_name[-2] == "_":
+        try_names.add(imported_mesh_name[:-2])
+    if imported_mesh_name.endswith("_Shape"):
+        try_names.add(imported_mesh_name[:-6])
+    safe_imported_obj_name = imported_obj_name
+    if imported_obj_name:
+        safe_imported_obj_name = safe_export_name(imported_obj_name)
+        try_names.add(imported_obj_name)
+        try_names.add(safe_imported_obj_name)
+        if imported_obj_name.endswith("_Shape"):
+            try_names.add(imported_obj_name[:-6])
+
+    utils.log_info(f"Try Names: {try_names}")
+
+    found = []
+
+    # first try to match mesh names directly
+    for obj in objects:
+        obj_name = obj.GetName()
+        # the object name also works in avatars
+        if obj_name in try_names:
+            found.append(obj_name)
+        rl_meshes = obj.GetMeshNames()
+        if rl_meshes:
+            for mesh_name in rl_meshes:
+                if mesh_name in try_names:
+                    found.append(mesh_name)
+
+    if found:
+        return found
+
+    # then try to match object names
+    #if imported_obj_name:
+    #    for obj in objects:
+    #        obj_name = obj.GetName()
+    #        if obj_name == imported_obj_name or obj_name == safe_imported_obj_name:
+    #            mesh_names = obj.GetMeshNames()
+    #            for mesh_name in mesh_names:
+    #                if mesh_name not in found:
+    #                    found.append(mesh_name)
+
+    # try a partial match, but only if there is only one result
+    partial_mesh_match = None
+    partial_mesh_count = 0
+    for obj in objects:
+        obj_name = obj.GetName()
+        rl_meshes = obj.GetMeshNames()
+        for mesh_name in rl_meshes:
+            for try_name in try_names:
+                if try_name in mesh_name:
+                    partial_mesh_count += 1
+                    if not partial_mesh_match:
+                        partial_mesh_match = mesh_name
+                    # only count 1 match per try set
+                    break
+    if partial_mesh_count == 1:
+        found.append(partial_mesh_match)
+
+    # try a partial match on the object names
+    partial_obj_match = None
+    partial_obj_count = 0
+    for obj in objects:
+        obj_name = obj.GetName()
+        for imported_obj_name in obj_name or safe_imported_obj_name in obj_name:
+            partial_obj_count += 1
+            if not partial_obj_match:
+                partial_obj_match = obj
+    if partial_obj_count == 1:
+        found.extend(partial_obj_match.GetMeshNames())
 
     return found
 
@@ -1308,11 +1679,18 @@ def user_files_path(sub_path=None, create=False):
     return path
 
 
-def temp_files_path(sub_path=None, create=False):
-    res = RGlobal.GetPath(EPathType_Temp, "")
-    path = res[1]
-    if sub_path:
-        path = os.path.join(path, sub_path)
+def temp_files_path(sub_path=None, create=False, prefs=None):
+    path = None
+    try:
+        if prefs:
+            path = prefs.get_temp_folder()
+    except: ...
+    if not path:
+        res = RGlobal.GetPath(EPathType_Temp, "")
+        path = res[1]
+    if path:
+        if sub_path:
+            path = os.path.join(path, sub_path)
         if create:
             os.makedirs(path, exist_ok=True)
     return path
@@ -1746,6 +2124,7 @@ def safe_get_skeleton_component(obj: RIObject) -> RISkeletonComponent:
     except:
         return None
 
+
 def get_extended_skin_bones_tree(avatar_or_prop: RIObject):
 
     child_objects: list = RScene.FindChildObjects(avatar_or_prop, EObjectType_Prop | EObjectType_Accessory)
@@ -2090,8 +2469,6 @@ def get_all_camera_light_data(no_animation=False, fps: RFps=None):
     return all_data
 
 
-IGNORE_NODES = ["RL_BoneRoot", "IKSolverDummy", "NodeForExpressionLookAtSolver"]
-
 def append_if(list: list, item):
     if item not in list:
         list.append(item)
@@ -2102,6 +2479,10 @@ def extend_if(base: list, list: list):
         if item not in base:
             base.append(item)
     return base
+
+
+IGNORE_NODES = ["RL_BoneRoot", "IKSolverDummy", "NodeForExpressionLookAtSolver"]
+
 
 def get_actor_objects(actor):
     objects = []
@@ -2157,8 +2538,8 @@ def get_actor_physics_object(actor, mesh_name, mat_name):
             if physics_component:
                 if mesh_name in physics_component.GetSoftPhysicsMeshNameList():
                     if mat_name in physics_component.GetSoftPhysicsMaterialNameList(mesh_name):
-                        return obj
-    return None
+                        return obj, physics_component
+    return None, None
 
 
 def get_actor_physics_components(actor: RIAvatar):
@@ -2199,6 +2580,15 @@ def safe_export_name(name, is_material = False):
     if is_material:
         if name[0] in DIGITS:
             name = f"_{name}"
+    return name
+
+
+def deduplicate_name(name: str):
+    """Remove any _01 from the material name"""
+    if len(name) >= 3 and name[-3] == "_" and name[-2:].isdigit():
+            name = name[:-3]
+    elif len(name) >= 2 and name[-2] == "_" and name[-1].isdigit():
+            name = name[:-2]
     return name
 
 
@@ -2413,13 +2803,13 @@ def get_camera_data(camera: RICamera, fps: RFps, frame, switch_data = None):
     return camera_data
 
 
-def RGB_color(RGB):
+def RGB_color(RGB) -> RRgb:
     c = RRgb()
     c.From(RGB[0], RGB[1], RGB[2])
     return c
 
 
-def rgb_color(rgb):
+def rgb_color(rgb) -> RRgb:
     c = RRgb(rgb[0], rgb[1], rgb[2])
     return c
 
@@ -2503,14 +2893,26 @@ def find_morph_id(avatar: RIAvatar, morph_name):
     for i, name in enumerate(names):
         if name == morph_name:
             return ids[i]
+    # try by categories
+    categories = ASC.GetShapingMorphCatergoryNames()
+    for category in categories:
+        ids = ASC.GetShapingMorphIDs(category)
+        names = ASC.GetShapingMorphDisplayNames(category)
+        for i, name in enumerate(names):
+            if name == morph_name:
+                return ids[i]
     return None
 
 
-def set_morph_slider(avatar: RIAvatar, slider_name, weight):
+def set_morph_slider(avatar: RIAvatar, slider_name, weight, fall_back_id=None):
+    ASC: RIAvatarShapingComponent = avatar.GetAvatarShapingComponent()
     morph_id = find_morph_id(avatar, slider_name)
     if morph_id:
-        ASC: RIAvatarShapingComponent = avatar.GetAvatarShapingComponent()
         ASC.SetShapingMorphWeight(morph_id, weight)
+    else:
+        utils.log_error(f"Morph: {slider_name} not found!")
+        if fall_back_id:
+            ASC.SetShapingMorphWeight(fall_back_id, weight)
 
 
 def matrix_to_euler_xyz(M: RMatrix3, degrees=False):
@@ -2637,3 +3039,98 @@ def generate_base_json_data(path, name, generation):
     with open(path, "w") as write_file:
         write_file.write(json_string)
     return json_data
+
+
+def get_project_name():
+    global PROJECT_FILE_NAME
+    if PROJECT_FILE_NAME:
+        return PROJECT_FILE_NAME
+    selection = RScene.GetSelectedObjects()
+    for obj in selection:
+        avatar = find_parent_avatar(obj)
+        if avatar:
+            return avatar.GetName()
+    for obj in selection:
+        prop = find_parent_avatar_or_prop(obj)
+        if prop:
+            return prop.GetName()
+    return "Default" if RApplication.GetProductName() == "Character Creator" else "DefScene"
+
+
+def get_source_materials_by_name(avatar):
+    meshes = avatar.GetMeshes()
+    mesh: RIMesh = None
+    material: RIStdMaterial = None
+    materials_by_id = {}
+    for mesh in meshes:
+        mesh_name = mesh.GetName()
+        materials = mesh.GetStdMaterials()
+        for material in materials:
+            material_id = material.GetID()
+            material_name = material.GetName()
+            materials_by_id.setdefault(material_id, [])
+            if (mesh_name, material_name) not in materials_by_id[material_id]:
+                materials_by_id[material_id].append((mesh_name, material_name))
+    source_materials_by_name = {}
+    for id in materials_by_id:
+        if len(materials_by_id[id]) > 1:
+            for mesh_name, material_name in materials_by_id[id]:
+                source_materials_by_name[material_name] = (mesh_name, material_name, id)
+    return source_materials_by_name
+
+
+def consolidate_materials(avatar: RIAvatar):
+    source_materials = get_source_materials_by_name(avatar)
+    #print(json.dumps(source_materials, indent=2))
+    return
+    material_component: RIMaterialComponent = avatar.GetMaterialComponent()
+    meshes = avatar.GetMeshes()
+    mesh: RIMesh = None
+    material: RIStdMaterial = None
+    linked_materials = []
+    consolidate = []
+    MATS = {}
+    done_ids = set()
+    for mesh in meshes:
+        mesh_id = mesh.GetID()
+        if mesh_id not in done_ids:
+            done_ids.add(mesh_id)
+            mesh_name = mesh.GetName()
+            materials = mesh.GetStdMaterials()
+            for material in materials:
+                material_id = material.GetID()
+                material_name = material.GetName()
+                if material_name not in MATS:
+                    MATS[material_name] = []
+                for m, id in MATS[material_name]:
+                    if material_id == id:
+                        if material_id not in linked_materials:
+                            linked_materials.append(material_id)
+                else:
+                    MATS[material_name].append((material, material_id))
+    print(linked_materials)
+    return
+    MATS = {}
+    done_ids = set()
+    for mesh in meshes:
+        mesh_id = mesh.GetID()
+        if mesh_id not in done_ids:
+            done_ids.add(mesh_id)
+            mesh_name = mesh.GetName()
+            materials = mesh.GetStdMaterials()
+            for material in materials:
+                material_id = material.GetID()
+                if material_id not in done_ids:
+                    done_ids.add(material_id)
+                    material_name = material.GetName()
+                    if material_name in MATS and MATS[material_name]["material"] != material:
+                        src_mesh = MATS[material_name]['mesh']
+                        src_mesh_name = src_mesh.GetName()
+                        consolidate.append((src_mesh_name, material_name, mesh_name, material_name))
+                    else:
+                        utils.log_info(f"Source Material: {mesh_name} / {material_name}")
+                        MATS[material_name] = { "mesh": mesh, "material": material }
+    for src_mesh_name, material_name, mesh_name, material_name in consolidate:
+        utils.log_info(f"Consolidating Material: {mesh_name} / {material_name} from: {src_mesh_name}")
+        material_component.CopyMaterial(src_mesh_name, material_name, mesh_name, material_name)
+

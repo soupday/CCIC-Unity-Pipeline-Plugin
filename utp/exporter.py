@@ -75,6 +75,7 @@ class Exporter:
     check_current_animation: QCheckBox = None
     check_animation_only: QCheckBox = None
     check_remove_hidden: QCheckBox = None
+    check_unity_textures: QCheckBox = None
     radio_export_pose: QRadioButton = None
     radio_export_anim: QRadioButton = None
     radio_export_sub_c: QRadioButton = None
@@ -89,6 +90,7 @@ class Exporter:
     option_current_animation = False
     option_animation_only = False
     option_remove_hidden = True
+    option_unity_textures = True
     option_fps = RFps.Fps60
     label_desc = None
     no_options = False
@@ -115,6 +117,7 @@ class Exporter:
         self.option_export_sub_level = OPTS.EXPORT_SUB_LEVEL
         self.option_animation_only = OPTS.EXPORT_MOTION_ONLY
         self.option_remove_hidden = OPTS.EXPORT_REMOVE_HIDDEN
+        self.option_unity_textures = OPTS.EXPORT_UNITY_TEXTURES
         self.option_fps = OPTS.get_export_RFps()
 
         utils.log("======================")
@@ -349,6 +352,7 @@ class Exporter:
         col = qt.column(layout)
         col.setSpacing(0)
         self.check_remove_hidden = qt.checkbox(col, "Delete Hidden Faces", True)
+        self.check_unity_textures = qt.checkbox(col, "Unity Textures", True)
         self.check_bakehair = qt.checkbox(col, "Bake Hair Diffuse and Specular", True)
         self.check_bakeskin = qt.checkbox(col, "Bake Skin Diffuse", True)
         self.check_animation_only = qt.checkbox(col, "Motion Only", False)
@@ -476,25 +480,27 @@ class Exporter:
         if self.radio_export_sub_2: self.radio_export_sub_2.setChecked(self.option_export_sub_level == 2)
         if self.check_animation_only: self.check_animation_only.setChecked(self.option_animation_only)
         if self.check_remove_hidden: self.check_remove_hidden.setChecked(self.option_remove_hidden)
+        if self.check_unity_textures: self.check_unity_textures.setChecked(self.option_unity_textures)
+
         self.update_options_enabled()
 
     def update_options_enabled(self):
         if self.option_preset == 0:
             qt.disable(self.group_export_range, self.check_animation_only)
-            qt.enable(self.check_remove_hidden,
+            qt.enable(self.check_remove_hidden, self.check_unity_textures,
                       self.check_bakehair, self.check_bakeskin, self.group_export_subd)
         elif self.option_preset == 1:
             qt.enable(self.group_export_range, self.check_animation_only,
-                      self.check_remove_hidden,
+                      self.check_remove_hidden, self.check_unity_textures,
                       self.check_bakehair, self.check_bakeskin, self.group_export_subd)
         elif self.option_preset == 2:
             qt.disable(self.group_export_range, self.check_animation_only)
-            qt.enable(self.check_remove_hidden,
+            qt.enable(self.check_remove_hidden, self.check_unity_textures,
                       self.check_bakehair, self.check_bakeskin, self.group_export_subd)
         if not self.props and not self.avatars and not self.lights and not self.cameras:
             qt.disable(self.check_animation_only)
         if not self.avatars:
-            qt.disable(self.check_remove_hidden,
+            qt.disable(self.check_remove_hidden, self.check_unity_textures,
                        self.check_bakehair, self.check_bakeskin, self.group_export_subd)
 
     def fetch_options(self):
@@ -525,6 +531,9 @@ class Exporter:
         if self.check_remove_hidden:
             self.option_remove_hidden = self.check_remove_hidden.isChecked()
             OPTS.EXPORT_REMOVE_HIDDEN = self.option_remove_hidden
+        if self.check_unity_textures:
+            self.option_unity_textures = self.check_unity_textures.isChecked()
+            OPTS.EXPORT_UNITY_TEXTURES = self.option_unity_textures
         self.option_fps = OPTS.get_export_RFps()
         OPTS.write_state()
 
@@ -570,6 +579,7 @@ class Exporter:
         self.group_export_subd = None
         self.check_animation_only = None
         self.check_remove_hidden = None
+        self.check_unity_textures = None
         if self.window:
             self.window.Close()
         self.window = None
@@ -582,6 +592,7 @@ class Exporter:
         self.option_fps = fps if fps else OPTS.get_export_RFps()
 
         if cc.is_cc():
+            self.option_unity_textures = OPTS.CC_EXPORT_UNITY_TEXTURES
             self.option_bakehair = OPTS.CC_BAKE_TEXTURES
             self.option_bakeskin = OPTS.CC_BAKE_TEXTURES
             self.option_remove_hidden = OPTS.CC_DELETE_HIDDEN_FACES
@@ -596,6 +607,7 @@ class Exporter:
                 self.option_current_pose = False
             self.option_export_sub_level = OPTS.CC_EXPORT_MAX_SUB_LEVEL
         else:
+            self.option_unity_textures = OPTS.IC_EXPORT_UNITY_TEXTURES
             self.option_bakehair = OPTS.IC_BAKE_TEXTURES
             self.option_bakeskin = OPTS.IC_BAKE_TEXTURES
             self.option_remove_hidden = OPTS.IC_DELETE_HIDDEN_FACES
@@ -736,12 +748,14 @@ class Exporter:
             if cc.is_avatar_hik(self.avatar):
                 options1 = options1 | EExportFbxOptions_ExportRootMotion
 
-        options2 = (EExportFbxOptions2__None | EExportFbxOptions2_UnityPreset
-                                             | EExportFbxOptions2_ResetBoneScale
+        options2 = (EExportFbxOptions2__None | EExportFbxOptions2_ResetBoneScale
                                              | EExportFbxOptions2_YUp
                                              | EExportFbxOptions2_RenameDuplicateMaterialName
                                              | EExportFbxOptions2_RenameDuplicateBoneName
                                              | EExportFbxOptions2_ExtraWordForUnityAndUnreal)
+
+        if self.option_unity_textures:
+            options2 = options2 | EExportFbxOptions2_UnityPreset
 
         options3 = (EExportFbxOptions3__None | EExportFbxOptions3_ExportJson
                                              | EExportFbxOptions3_ExportVertexColor)

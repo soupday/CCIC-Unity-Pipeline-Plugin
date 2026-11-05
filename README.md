@@ -46,6 +46,11 @@ Changelog
 
 ### 2.2.7
 - Updates panel UI correctly when returning to focus.
+- Added option to disable Unity Textures export flag.
+    - Allows the Auto-setup to construct the HDRP and Metallic Alpha maps.
+    - Currently, due to a bug, iClone 8.76.5828.1 and CC 5.2.2228.1 do not export these Unity maps correctly.
+    - If materials do not setup correctly, disable Unity Textures in the Unity pipeline settings.
+
 
 ### 2.2.5
 - Fix to exporting HIK non-humanoids.

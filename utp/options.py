@@ -22,11 +22,13 @@ class Options():
     AUTO_START_SERVICE: bool = False
     MATCH_CLIENT_RATE: bool = True
     DATALINK_FRAME_SYNC: bool = False
+    CC_EXPORT_UNITY_TEXTURES: bool = True
     CC_DELETE_HIDDEN_FACES: bool = True
     CC_BAKE_TEXTURES: bool = False
     CC_EXPORT_MODE: str = "Animation"
     CC_EXPORT_MAX_SUB_LEVEL: int = -1
     CC_EXPORT_FPS: float = 0.0
+    IC_EXPORT_UNITY_TEXTURES: bool = True
     IC_DELETE_HIDDEN_FACES: bool = True
     IC_BAKE_TEXTURES: bool = False
     IC_EXPORT_MODE: str = "Animation"
@@ -42,6 +44,7 @@ class Options():
     EXPORT_MOTION_ONLY: bool = False
     EXPORT_REMOVE_HIDDEN: bool = False
     EXPORT_FPS: float = 0.0
+    EXPORT_UNITY_TEXTURES: bool = True
     #
     TOOLBAR_STATE_CC: bool = True
     TOOLBAR_STATE_IC: bool = True
@@ -89,6 +92,8 @@ class Options():
                 self.AUTO_START_SERVICE = get_attr(temp_state_json, "auto_start_service", False)
                 self.MATCH_CLIENT_RATE = get_attr(temp_state_json, "match_client_rate", True)
                 self.DATALINK_FRAME_SYNC = get_attr(temp_state_json, "datalink_frame_sync", False)
+                self.CC_EXPORT_UNITY_TEXTURES = get_attr(temp_state_json, "cc_export_unity_textures", True)
+                self.IC_EXPORT_UNITY_TEXTURES = get_attr(temp_state_json, "ic_export_unity_textures", True)
                 self.CC_DELETE_HIDDEN_FACES = get_attr(temp_state_json, "cc_delete_hidden_faces", False)
                 self.CC_BAKE_TEXTURES = get_attr(temp_state_json, "cc_bake_textures", True)
                 self.IC_DELETE_HIDDEN_FACES = get_attr(temp_state_json, "ic_delete_hidden_faces", True)
@@ -106,6 +111,7 @@ class Options():
                 self.EXPORT_CURRENT_ANIMATION = get_attr(temp_state_json, "export_current_animation", True)
                 self.EXPORT_MOTION_ONLY = get_attr(temp_state_json, "export_motion_only", False)
                 self.EXPORT_REMOVE_HIDDEN = get_attr(temp_state_json, "export_remove_hidden", False)
+                self.EXPORT_UNITY_TEXTURES = get_attr(temp_state_json, "export_unity_textures", True)
                 self.EXPORT_SUB_LEVEL = get_attr(temp_state_json, "export_sub_level", -1)
                 self.TOOLBAR_STATE_CC = get_attr(temp_state_json, "toolbar_state_cc", True)
                 self.TOOLBAR_STATE_IC = get_attr(temp_state_json, "toolbar_state_ic", True)
@@ -121,6 +127,8 @@ class Options():
             "auto_start_service": self.AUTO_START_SERVICE,
             "match_client_rate": self.MATCH_CLIENT_RATE,
             "datalink_frame_sync": self.DATALINK_FRAME_SYNC,
+            "cc_export_unity_textures": self.CC_EXPORT_UNITY_TEXTURES,
+            "ic_export_unity_textures": self.IC_EXPORT_UNITY_TEXTURES,
             "cc_delete_hidden_faces": self.CC_DELETE_HIDDEN_FACES,
             "cc_bake_textures": self.CC_BAKE_TEXTURES,
             "ic_delete_hidden_faces": self.IC_DELETE_HIDDEN_FACES,
@@ -138,6 +146,7 @@ class Options():
             "export_current_animation": self.EXPORT_CURRENT_ANIMATION,
             "export_motion_only": self.EXPORT_MOTION_ONLY,
             "export_remove_hidden": self.EXPORT_REMOVE_HIDDEN,
+            "export_unity_textures": self.EXPORT_UNITY_TEXTURES,
             "export_sub_level": self.EXPORT_SUB_LEVEL,
             "toolbar_state_cc": self.TOOLBAR_STATE_CC,
             "toolbar_state_ic": self.TOOLBAR_STATE_IC,
